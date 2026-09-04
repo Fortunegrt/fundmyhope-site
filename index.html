@@ -707,6 +707,7 @@
           <p class="lede">Start a fundraiser in minutes, or back a cause someone you may never meet is counting on.</p>
           <div class="search-row">
             <input type="text" id="search-input" placeholder="Search causes — medical, community, education…">
+            <button type="button" class="btn btn-gold" id="search-btn" style="flex-shrink:0;">Search</button>
           </div>
         </div>
         <div class="stat-strip" id="stat-strip"></div>
@@ -1707,7 +1708,10 @@
           : '<div class="detail-cover" style="background:' + ACCENTS[c.accent] + '">' + initials(c.title) + '</div>') +
         '<div style="display:flex; align-items:flex-start; justify-content:space-between; gap:16px;">' +
           '<h2 style="font-size:28px;">' + escapeHtml(c.title) + '</h2>' +
-          (isOwner ? '<button type="button" class="btn btn-outline" id="edit-fundraiser-btn" style="flex-shrink:0;">Edit</button>' : '') +
+          '<div style="display:flex; gap:8px; flex-shrink:0;">' +
+            '<button type="button" class="btn btn-outline" id="share-fundraiser-btn">Share</button>' +
+            (isOwner ? '<button type="button" class="btn btn-outline" id="edit-fundraiser-btn">Edit</button>' : '') +
+          '</div>' +
         '</div>' +
         '<div class="org-line" style="margin-top:10px;">' + c.category + ' &middot; Organized by ' + escapeHtml(c.organizer) + ' &middot; started ' + timeAgo(c.createdAt) + '</div>' +
         '<div class="story" style="margin-top:20px;">' + storyHtml + '</div>' +
@@ -1798,6 +1802,34 @@
     var editBtn = document.getElementById('edit-fundraiser-btn');
     if(editBtn){
       editBtn.addEventListener('click', function(){ openEdit(c.id); });
+    }
+
+    var shareBtn = document.getElementById('share-fundraiser-btn');
+    if(shareBtn){
+      shareBtn.addEventListener('click', async function(){
+        var shareUrl = window.location.origin + window.location.pathname + '#campaign=' + encodeURIComponent(c.id);
+        var shareData = {
+          title: c.title,
+          text: 'Support "' + c.title + '" on FundMyHope',
+          url: shareUrl
+        };
+        if(navigator.share){
+          try {
+            await navigator.share(shareData);
+          } catch(err){
+            // User cancelled the native share sheet — nothing to do.
+          }
+        } else if(navigator.clipboard && navigator.clipboard.writeText){
+          try {
+            await navigator.clipboard.writeText(shareUrl);
+            showToast('Link copied to clipboard');
+          } catch(err){
+            showToast('Could not copy link — copy it from the address bar instead.');
+          }
+        } else {
+          showToast('Copy this link: ' + shareUrl);
+        }
+      });
     }
 
     var withdrawBtn = document.getElementById('withdraw-btn');
@@ -2254,12 +2286,35 @@
     renderCampaignList();
   });
 
+  function runSearch(){
+    state.searchTerm = document.getElementById('search-input').value;
+    switchView('home');
+    renderFilterRow();
+    renderCampaignList();
+    var list = document.getElementById('campaign-list');
+    if(list){ list.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
+  }
+  document.getElementById('search-btn').addEventListener('click', runSearch);
+  document.getElementById('search-input').addEventListener('keydown', function(e){
+    if(e.key === 'Enter'){ e.preventDefault(); runSearch(); }
+  });
+
   // ---------- Boot ----------
   (async function init(){
     await restoreSession();
     await loadCampaigns();
     renderHome();
     renderCreateSwatches();
+
+    // If arriving via a shared campaign link (#campaign=<id>), open
+    // that campaign's detail view directly instead of the home list.
+    var hashMatch = window.location.hash.match(/[#&]campaign=([^&]+)/);
+    if(hashMatch){
+      var sharedId = decodeURIComponent(hashMatch[1]);
+      if(state.campaigns.some(function(c){ return c.id === sharedId; })){
+        openDetail(sharedId);
+      }
+    }
   })();
 })();
 </script>

@@ -241,6 +241,31 @@ footer.site{ padding-top: 30px; }
     </div>
   </header>
 
+  <div class="nav-drawer" id="nav-drawer">
+    <div class="nav-drawer-backdrop" id="nav-drawer-backdrop"></div>
+    <div class="nav-drawer-panel">
+      <button class="nav-drawer-close" id="nav-drawer-close" aria-label="Close menu">&times;</button>
+      <a href="index.html" class="drawer-link">Browse causes</a>
+      <a href="about.html" class="drawer-link">About us</a>
+      <a href="reviews.html" class="drawer-link">Reviews</a>
+      <a href="index.html" class="drawer-link drawer-cta">Start a fundraiser</a>
+    </div>
+  </div>
+  <script>
+    (function(){
+      var btn = document.getElementById('hamburger-btn');
+      var drawer = document.getElementById('nav-drawer');
+      var closeBtn = document.getElementById('nav-drawer-close');
+      var backdrop = document.getElementById('nav-drawer-backdrop');
+      function openDrawer(){ drawer.classList.add('open'); }
+      function closeDrawer(){ drawer.classList.remove('open'); }
+      if(btn) btn.addEventListener('click', openDrawer);
+      if(closeBtn) closeBtn.addEventListener('click', closeDrawer);
+      if(backdrop) backdrop.addEventListener('click', closeDrawer);
+    })();
+  </script>
+
+
     <section class="hero-plain">
       <div class="wrap">
         <div class="hero-inner">

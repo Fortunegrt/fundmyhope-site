@@ -643,9 +643,10 @@
 
   /* ---------- Auth ---------- */
   .auth-slot{ display: flex; align-items: center; gap: 10px; margin-left: 4px; }
+  .nav-links{ display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
   .hamburger-btn{ display: none; background: none; border: none; padding: 8px; cursor: pointer; margin-left: 2px; }
   .hamburger-btn span{ display: block; width: 22px; height: 2px; background: #F4EFDF; margin: 5px 0; border-radius: 2px; }
-  @media (max-width: 760px){
+  @media (max-width: 980px){
     nav.site-nav .nav-links{ display: none; }
     .hamburger-btn{ display: block; }
     .auth-slot{ display: none; }
@@ -675,16 +676,26 @@
     border-radius: 0 !important;
     box-shadow: none !important; outline: none !important;
     -webkit-appearance: none !important; appearance: none !important;
-    font-family: inherit; font-size: inherit; color: inherit;
+    font-family: inherit; font-size: inherit;
+    color: #F4EFDF !important;
     margin: 0; padding: 14px 4px; cursor: pointer;
   }
   button.drawer-link.drawer-cta{
     border-bottom: none !important;
+    background: var(--gold) !important; background-color: var(--gold) !important;
+    color: #2A1C05 !important;
+    border-radius: 4px !important;
+    text-align: center !important;
+    font-family: 'Inter', sans-serif !important;
+    font-weight: 600 !important;
+    font-size: 14.5px !important;
+    padding: 12px 14px !important;
   }
   button.drawer-link:focus, button.drawer-link:active{
     outline: none !important; box-shadow: none !important;
   }
   .drawer-link.drawer-logout{ color: #E7A9A0; }
+  button.drawer-link.drawer-logout{ color: #E7A9A0 !important; }
   .avatar-pill{
     display: flex; align-items: center; gap: 8px;
     background: rgba(244,239,223,0.1);
@@ -2159,7 +2170,11 @@
     }
 
     state.donationSuccessInfo = { amount: amt, name: nameVal, tip: pending.tip || 0 };
-    if(state.view === 'detail' && state.currentId === campaignId){ renderDetail(); }
+    // After a real redirect round-trip we land back on the home view
+    // with no campaign open (see the redirect_url comment above) — so
+    // open the right campaign explicitly instead of only re-rendering
+    // if one happened to already be open.
+    openDetailInternal(campaignId);
     openModal('donation-success');
   }
 
@@ -2191,11 +2206,13 @@
     try{ sessionStorage.removeItem('fmh_pending_donation'); }catch(storageErr){}
 
     if(status !== 'successful' && status !== 'completed'){
+      if(pending && pending.campaignId){ openDetailInternal(pending.campaignId); }
       state.donationFailedMessage = 'Your payment did not go through. Please try again.';
       openModal('donation-failed');
       return;
     }
     if(!transactionId){
+      if(pending && pending.campaignId){ openDetailInternal(pending.campaignId); }
       state.donationFailedMessage = 'Your payment could not be confirmed. Please try again or contact support.';
       openModal('donation-failed');
       return;
@@ -2215,6 +2232,7 @@
       }
       await recordSuccessfulDonation(pending);
     }catch(err){
+      if(pending && pending.campaignId){ openDetailInternal(pending.campaignId); }
       state.donationFailedMessage = (pending ? 'Your payment may have succeeded, but we could not confirm it. ' : '') + 'Please contact support' + (transactionId ? ' with this reference: ' + transactionId : '') + '.';
       openModal('donation-failed');
     }
@@ -2608,7 +2626,14 @@
               name: nameVal, email: emailVal, message: msgVal, anonymous: anon
             }));
           }catch(storageErr){ /* private browsing etc — redirect-return handling just won't have this to work with */ }
-          var redirectUrl = window.location.origin + window.location.pathname + '#campaign=' + encodeURIComponent(c.id);
+          // No hash/fragment here on purpose — Flutterwave appends its
+          // own ?status=&transaction_id=... to this URL, and anything
+          // after a # would swallow that query string instead of
+          // letting the browser treat it as real, readable params.
+          // Which campaign to return to is recovered from
+          // sessionStorage (see handleFlutterwaveRedirectReturn) once
+          // the redirect lands, not from the URL itself.
+          var redirectUrl = window.location.origin + window.location.pathname;
           var flwResult = await new Promise(function(resolve, reject){
             FlutterwaveCheckout({
               public_key: FLUTTERWAVE_PUBLIC_KEY,

@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<script src="https://js.paystack.co/v1/inline.js"></script>
+<script src="https://checkout.flutterwave.com/v3.js"></script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="color-scheme" content="light">
@@ -1006,35 +1006,39 @@
   var SUPABASE_URL = 'https://xvjauzaavsaisyabqeqn.supabase.co';
   var SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_ZYYlz-ENhXrpOyUG1EzrvQ_hqz3sR6C';
 
-  // Card payments are still simulated — that part genuinely needs a
-  // small server holding your Paystack SECRET key (see server-example/
-  // and its README — swap the Stripe endpoints there for Paystack's).
-  // Paystack was chosen over Stripe because Stripe does not support
-  // Nigerian merchant accounts; Paystack does, and it can also accept
-  // cards issued outside the countries it settles to. Once you stand
-  // the server up:
+  // Card payments are still simulated by default — that part genuinely
+  // needs a small server holding your Flutterwave SECRET key (see
+  // server-example/ and its README). Flutterwave was chosen for its
+  // broader international card/currency support (donors don't have to
+  // be in Nigeria) and its Individual/Registered Business tiers. Once
+  // you stand the server up:
   //   1. Set API_BASE to its URL, e.g. 'https://api.fundmyhope.com/api'.
-  //   2. Set PAYSTACK_PUBLIC_KEY to your real Paystack public key.
-  //   3. Load Paystack's inline script (already added near the top of
-  //      <head>: https://js.paystack.co/v1/inline.js).
-  //   4. On the server, POST /paystack/initialize should create a
-  //      transaction with your SECRET key and return { reference }.
-  //      After the popup below reports success, GET
-  //      /paystack/verify/:reference on the server (using the secret
-  //      key against Paystack's /transaction/verify endpoint) before
-  //      the donation is recorded — never trust the client-side
-  //      callback alone, since it can be spoofed.
+  //   2. Set FLUTTERWAVE_PUBLIC_KEY to your real Flutterwave public key
+  //      (Flutterwave dashboard → Settings → API). Never put the SECRET
+  //      key here — that only ever lives on the server.
+  //   3. Load Flutterwave's inline script (already added near the top of
+  //      <head>: https://checkout.flutterwave.com/v3.js).
+  //   4. Flutterwave's inline widget below generates its own reference
+  //      (tx_ref) client-side and needs no "initialize" server call —
+  //      but after it reports success, GET
+  //      /flutterwave/verify/:transactionId on the server (using the
+  //      secret key against Flutterwave's /transactions/:id/verify
+  //      endpoint) before the donation is recorded — never trust the
+  //      client-side callback alone, since it can be spoofed.
   var API_BASE = 'https://fundmyhope-server.onrender.com/api';
-  var PAYSTACK_PUBLIC_KEY = 'pk_test_59d4e1be1661207e579ea14a58a99798c091eb6d';
+  var FLUTTERWAVE_PUBLIC_KEY = 'FLWPUBK_TEST-c6d916c34cddc4147f6563b157df95d9-X';
   // Withdrawals aren't paid out automatically at all — every request
   // just collects the organizer's PayPal email and tag(s) and notifies
   // the FundMyHope team, who send the money and follow up by hand.
 
-  // ---- Paystack Inline (real card collection, PCI-compliant) ----
-  // Card entry happens inside Paystack's own hosted popup — raw card
+  // ---- Flutterwave Inline (real card/bank collection, PCI-compliant) ----
+  // Card entry happens inside Flutterwave's own hosted popup — raw card
   // numbers never touch this page's JS or your server, only the
-  // reference used to look the transaction up afterwards.
-  var paystackReady = !!(PAYSTACK_PUBLIC_KEY && window.PaystackPop);
+  // transaction id used to look the charge up afterwards.
+  var flutterwaveReady = !!(FLUTTERWAVE_PUBLIC_KEY && FLUTTERWAVE_PUBLIC_KEY.indexOf('REPLACE_WITH') === -1 && window.FlutterwaveCheckout);
+  function makeTxRef(){
+    return 'fmh_' + Date.now() + '_' + Math.random().toString(36).slice(2, 10);
+  }
 
   // ---- Supabase Auth (GoTrue) ----
   // New-style Supabase keys are not JWTs, so they go on the `apikey`
@@ -1122,7 +1126,7 @@
     };
   }
 
-  // Thin wrapper for the *separate* Paystack backend (payments only): hits
+  // Thin wrapper for the *separate* Flutterwave backend (payments only): hits
   // API_BASE when set, otherwise signals "no backend — simulate instead".
   async function apiRequest(path, options){
     if(API_BASE){
@@ -2014,15 +2018,15 @@
           '</div>' +
           '<div class="checkline"><input type="checkbox" id="d-anon"> <label for="d-anon" style="margin:0;">Give anonymously</label></div>' +
           '<div class="pay-section">' +
-            '<div class="pay-section-label">Payment <span class="pay-badge">Paystack</span></div>' +
+            '<div class="pay-section-label">Payment <span class="pay-badge">Flutterwave</span></div>' +
             '<div class="card-field-group" id="card-field-group">' +
-              '<div style="font-size:13.5px; color:var(--ink-soft);">You&rsquo;ll enter your card or bank details in Paystack&rsquo;s secure popup after clicking Give below.</div>' +
+              '<div style="font-size:13.5px; color:var(--ink-soft);">You&rsquo;ll enter your card or bank details in Flutterwave&rsquo;s secure popup after clicking Give below.</div>' +
             '</div>' +
             '<div class="card-error" id="card-error"></div>' +
-            '<div class="lock-note">&#128274; Payments are encrypted and processed by Paystack.</div>' +
+            '<div class="lock-note">&#128274; Payments are encrypted and processed by Flutterwave.</div>' +
           '</div>' +
           '<button type="submit" class="btn btn-gold btn-full" style="margin-top:16px;">Give ' + fmt(state.selectedAmount) + '</button>' +
-          '<div class="demo-note">' + ((paystackReady && API_BASE) ? 'Test mode — Paystack test cards (e.g. 4084 0840 8408 4081) can be used in the popup.' : 'Demo mode: no card network is contacted and no money moves. Set API_BASE and PAYSTACK_PUBLIC_KEY near the top of the script to accept real payments.') + '</div>' +
+          '<div class="demo-note">' + ((flutterwaveReady && API_BASE) ? 'Test mode — Flutterwave test cards can be used in the popup.' : 'Demo mode: no card network is contacted and no money moves. Set API_BASE and FLUTTERWAVE_PUBLIC_KEY near the top of the script to accept real payments.') + '</div>' +
         '</form>' +
       '</div>';
 
@@ -2165,7 +2169,7 @@
       cardErrorEl.classList.remove('show');
       document.getElementById('card-field-group').classList.remove('invalid');
       if(!amt || amt <= 0){ showToast('Enter a donation amount first.'); return; }
-      if(paystackReady && API_BASE && !emailVal){
+      if(flutterwaveReady && API_BASE && !emailVal){
         cardErrorEl.textContent = 'Enter your email to continue to payment.';
         cardErrorEl.classList.add('show');
         document.getElementById('card-field-group').classList.add('invalid');
@@ -2178,41 +2182,41 @@
       submitBtn.textContent = 'Processing…';
 
       try{
-        if(paystackReady && API_BASE){
-          // Real payment: ask our server to open a Paystack transaction
-          // (using its SECRET key) and hand back a reference, then let
-          // Paystack's own hosted popup collect the card or bank details.
-          // Nothing sensitive ever touches this page's JS.
-          var intentRes = await apiRequest('/paystack/initialize', {
-            method: 'POST',
-            body: JSON.stringify({ campaignId: c.id, amount: amt, email: emailVal })
-          });
-          if(!intentRes || !intentRes.reference){
-            throw new Error('Could not start payment. Please try again.');
-          }
-          var paystackResult = await new Promise(function(resolve, reject){
-            var handler = PaystackPop.setup({
-              key: PAYSTACK_PUBLIC_KEY,
-              email: emailVal,
-              amount: Math.round(amt * 100), // Paystack amounts are in the smallest currency unit (kobo/cents)
-              currency: 'NGN', // TESTING ONLY — must match the currency sent by the server's /paystack/initialize call. Switch back to 'USD' together with paystack.js once business verification + international payments are approved on Paystack.
-              ref: intentRes.reference,
-              metadata: { campaignId: c.id, donorName: nameVal },
-              callback: function(response){ resolve(response); },
-              onClose: function(){ reject(new Error('Payment window closed before completing.')); }
+        if(flutterwaveReady && API_BASE){
+          // Real payment: Flutterwave's inline widget collects the card
+          // or bank details itself, using only the PUBLIC key — nothing
+          // sensitive ever touches this page's JS or your server.
+          var txRef = makeTxRef();
+          var flwResult = await new Promise(function(resolve, reject){
+            FlutterwaveCheckout({
+              public_key: FLUTTERWAVE_PUBLIC_KEY,
+              tx_ref: txRef,
+              amount: amt,
+              currency: 'NGN', // must match what routes/flutterwave.js verifies against
+              payment_options: 'card, banktransfer, ussd',
+              customer: { email: emailVal, name: nameVal },
+              customizations: { title: 'FundMyHope', description: 'Donation to ' + c.title },
+              meta: { campaignId: c.id },
+              callback: function(response){
+                if(response && (response.status === 'successful' || response.status === 'completed')){
+                  resolve(response);
+                } else {
+                  reject(new Error('Payment was not completed.'));
+                }
+              },
+              onclose: function(){ /* handled by the callback/reject above when abandoned */ }
             });
-            handler.openIframe();
           });
           // Never trust the popup callback alone — confirm the charge
           // actually succeeded by asking our server to verify the
-          // reference against Paystack directly (with the secret key)
-          // before the donation is recorded.
-          var verifyRes = await apiRequest('/paystack/verify/' + encodeURIComponent(paystackResult.reference), { method: 'GET' });
+          // transaction against Flutterwave directly (with the secret
+          // key) before the donation is recorded.
+          var verifyRes = await apiRequest('/flutterwave/verify/' + encodeURIComponent(flwResult.transaction_id), { method: 'GET' });
           if(!verifyRes || verifyRes.status !== 'success'){
             throw new Error('Payment could not be verified. Please try again or contact support.');
           }
         } else {
-          // No Paystack backend configured — simulate the processing delay.
+          // No Flutterwave backend configured — simulate the processing delay.
           await new Promise(function(resolve){ setTimeout(resolve, 700); });
         }
 

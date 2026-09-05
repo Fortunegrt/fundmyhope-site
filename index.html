@@ -2663,7 +2663,14 @@
           if(!verifyRes || verifyRes.status !== 'success'){
             throw new Error('Payment could not be verified. Please try again or contact support.');
           }
-          try{ sessionStorage.removeItem('fmh_pending_donation'); }catch(storageErr){}
+          // Don't clear the saved donation details here — Flutterwave
+          // sometimes also triggers a real page redirect around the
+          // same moment this callback runs, which can cut this code
+          // off before it finishes recording the donation below. If
+          // that happens, the redirect-return handler (boot time) needs
+          // these details still in sessionStorage to finish the job
+          // itself. Only remove them once recording actually succeeds
+          // (see the end of this block).
         } else {
           // No Flutterwave backend configured — simulate the processing delay.
           await new Promise(function(resolve){ setTimeout(resolve, 700); });
@@ -2711,6 +2718,7 @@
           await saveCampaign(c);
         }
 
+        try{ sessionStorage.removeItem('fmh_pending_donation'); }catch(storageErr){}
         showToast('Thank you — your ' + fmt(amt) + ' gift was added.');
         state.selectedAmount = 50;
         state.donationSuccessInfo = { amount: amt, name: nameVal, tip: tipAmt };

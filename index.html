@@ -73,7 +73,7 @@
     font-weight: 600;
     letter-spacing: 0.2px;
     display: flex;
-    align-items: baseline;
+    align-items: center;
     gap: 8px;
   }
   .wordmark span{
@@ -665,7 +665,14 @@
   .drawer-user-name{ font-family: 'Fraunces', serif; font-size: 16px; color: #F4EFDF; opacity: 0.9; }
   .drawer-link{ color: #F4EFDF; text-decoration: none; padding: 14px 4px; border-bottom: 1px solid rgba(244,239,223,0.14); font-size: 16px; font-family: 'Fraunces', serif; }
   .drawer-link.drawer-cta{ margin-top: 14px; border: none; background: var(--gold); color: #2A1C05; border-radius: 4px; padding: 12px 14px; text-align: center; font-family: 'Inter', sans-serif; font-weight: 600; font-size: 14.5px; }
-  button.drawer-link{ width: 100%; background: none; text-align: left; }
+  button.drawer-link{
+    width: 100%; background: none; text-align: left;
+    border: none; border-bottom: 1px solid rgba(244,239,223,0.14);
+    -webkit-appearance: none; appearance: none;
+    font-family: inherit; font-size: inherit; color: inherit;
+    margin: 0; cursor: pointer;
+  }
+  button.drawer-link.drawer-cta{ border: none; }
   .drawer-link.drawer-logout{ color: #E7A9A0; }
   .avatar-pill{
     display: flex; align-items: center; gap: 8px;

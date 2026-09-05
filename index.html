@@ -464,6 +464,22 @@
     background: var(--green);
     color: #F4EFDF;
   }
+  .tip-field{ background: var(--bg-alt); border-radius: 6px; padding: 12px 14px; margin-top: 16px; }
+  .tip-grid{ display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-top: 4px; }
+  .tip-btn{
+    padding: 8px 0;
+    border-radius: 3px;
+    border: 1px solid var(--border);
+    background: var(--white);
+    font-weight: 600;
+    font-size: 13px;
+  }
+  .tip-btn.selected{
+    border-color: var(--teal);
+    background: var(--teal);
+    color: #F4EFDF;
+  }
+  .tip-note{ font-size: 12.5px; color: var(--ink-faint); margin-top: 8px; }
   .field{ margin-top: 12px; }
   .field label{ display: block; font-size: 12.5px; color: var(--ink-soft); margin-bottom: 5px; }
   .field input, .field textarea{
@@ -599,8 +615,7 @@
   /* ---------- Responsive ---------- */
   img{ max-width: 100%; }
   @media (max-width: 700px){
-    .header-inner{ flex-wrap: wrap; justify-content: center; gap: 10px; padding: 16px 0; }
-    nav.site-nav{ flex-wrap: wrap; justify-content: center; width: 100%; gap: 8px; }
+    .header-inner{ padding: 14px 0; }
     .wordmark{ font-size: 19px; }
     .brand-mark{ height: 28px; width: 28px; }
     .btn{ padding: 8px 13px; font-size: 13.5px; }
@@ -633,6 +648,7 @@
   @media (max-width: 760px){
     nav.site-nav .nav-links{ display: none; }
     .hamburger-btn{ display: block; }
+    .auth-slot{ display: none; }
   }
   .nav-drawer{ position: fixed; inset: 0; z-index: 400; visibility: hidden; }
   .nav-drawer.open{ visibility: visible; }
@@ -644,9 +660,13 @@
     transform: translateX(100%); transition: transform .25s ease; box-shadow: -10px 0 28px rgba(0,0,0,0.3);
   }
   .nav-drawer.open .nav-drawer-panel{ transform: translateX(0); }
-  .nav-drawer-close{ align-self: flex-end; background: none; border: none; color: #F4EFDF; font-size: 28px; line-height: 1; cursor: pointer; margin-bottom: 10px; padding: 4px; }
+  .nav-drawer-close{ background: none; border: none; color: #F4EFDF; font-size: 28px; line-height: 1; cursor: pointer; padding: 4px; }
+  .drawer-top-row{ display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+  .drawer-user-name{ font-family: 'Fraunces', serif; font-size: 16px; color: #F4EFDF; opacity: 0.9; }
   .drawer-link{ color: #F4EFDF; text-decoration: none; padding: 14px 4px; border-bottom: 1px solid rgba(244,239,223,0.14); font-size: 16px; font-family: 'Fraunces', serif; }
   .drawer-link.drawer-cta{ margin-top: 14px; border: none; background: var(--gold); color: #2A1C05; border-radius: 4px; padding: 12px 14px; text-align: center; font-family: 'Inter', sans-serif; font-weight: 600; font-size: 14.5px; }
+  button.drawer-link{ width: 100%; background: none; text-align: left; }
+  .drawer-link.drawer-logout{ color: #E7A9A0; }
   .avatar-pill{
     display: flex; align-items: center; gap: 8px;
     background: rgba(244,239,223,0.1);
@@ -732,6 +752,18 @@
     font-size: 11.5px; color: var(--ink-faint); margin-top: 8px; line-height: 1.4;
   }
   .lock-note{ display:flex; align-items:center; gap:6px; font-size: 12px; color: var(--ink-faint); margin-top: 10px; }
+  /* Flutterwave's checkout script injects a hidden iframe on the page
+     (used for fraud detection) that isn't part of anything we render.
+     On some browsers, if that iframe fails to load, the browser shows
+     literal "Load failed" fallback text in its place. This doesn't
+     affect whether payments succeed — it's purely cosmetic — but hide
+     any near-zero-size iframe so that fallback text can't render. */
+  iframe[width="0"], iframe[height="0"],
+  iframe[style*="width: 0"], iframe[style*="height: 0"],
+  iframe[style*="width:0"], iframe[style*="height:0"],
+  iframe[width="1"], iframe[height="1"]{
+    display: none !important;
+  }
 </style>
 </head>
 <body>
@@ -755,14 +787,16 @@
   <div class="nav-drawer" id="nav-drawer">
     <div class="nav-drawer-backdrop" id="nav-drawer-backdrop"></div>
     <div class="nav-drawer-panel">
-      <button class="nav-drawer-close" id="nav-drawer-close" aria-label="Close menu">&times;</button>
-      <a href="index.html" data-nav="home" class="drawer-link">Browse causes</a>
+      <div class="drawer-top-row">
+        <span class="drawer-user-name" id="drawer-user-name"></span>
+        <button class="nav-drawer-close" id="nav-drawer-close" aria-label="Close menu">&times;</button>
+      </div>
       <a href="about.html" class="drawer-link">About us</a>
       <a href="reviews.html" class="drawer-link">Reviews</a>
       <a href="how-it-works.html" class="drawer-link">How it works</a>
       <a href="faq.html" class="drawer-link">FAQ</a>
       <a href="contact.html" class="drawer-link">Contact</a>
-      <a href="index.html" data-nav="create" class="drawer-link drawer-cta">Start a fundraiser</a>
+      <div id="drawer-auth-links"></div>
     </div>
   </div>
   <script>
@@ -850,6 +884,33 @@
           <div class="form-field">
             <label for="f-organizer">Your name</label>
             <input type="text" id="f-organizer" placeholder="How you'll appear as organizer" required maxlength="60">
+          </div>
+          <div id="create-vetting-section">
+            <div class="note-box" style="margin: 4px 0 16px;">
+              We verify every new fundraiser's organizer before it goes live — this is what lets us confirm a
+              withdrawal is going to a real, named person later. It's a one-time step; editing this fundraiser
+              afterward won't ask for it again.
+            </div>
+            <div class="form-field">
+              <label for="f-legal-name">Your full legal name</label>
+              <input type="text" id="f-legal-name" placeholder="As it appears on your ID" maxlength="80">
+            </div>
+            <div class="form-row-2">
+              <div class="form-field">
+                <label for="f-id-type">Government ID type</label>
+                <select id="f-id-type">
+                  <option value="">Select ID type</option>
+                  <option value="NIN">NIN</option>
+                  <option value="Passport">International Passport</option>
+                  <option value="Driver's Licence">Driver&rsquo;s Licence</option>
+                  <option value="Voter's Card">Voter&rsquo;s Card</option>
+                </select>
+              </div>
+              <div class="form-field">
+                <label for="f-id-number">ID number</label>
+                <input type="text" id="f-id-number" placeholder="As it appears on the ID" maxlength="40">
+              </div>
+            </div>
           </div>
           <div class="form-field">
             <label for="f-story">Story</label>
@@ -986,6 +1047,8 @@
     searchTerm: '',
     currentId: null,
     selectedAmount: 50,
+    selectedTipPercent: 10,
+    tipCustomAmount: null,
     user: null,          // { name, email } of the logged-in user, or null
     pendingAction: null,  // 'create' | 'donate' — what to resume after a login prompt
     modal: null,          // 'login' | 'signup' | 'withdraw' | null
@@ -1027,6 +1090,15 @@
   //      client-side callback alone, since it can be spoofed.
   var API_BASE = 'https://fundmyhope-server.onrender.com/api';
   var FLUTTERWAVE_PUBLIC_KEY = 'FLWPUBK_TEST-c6d916c34cddc4147f6563b157df95d9-X';
+  // FundMyHope's own cut, taken out of each withdrawal payout — this is
+  // NOT something Flutterwave charges or knows about; Flutterwave only
+  // charges its own processing fee on the original donation. Since
+  // withdrawals here are reviewed and paid out by hand (not automatic),
+  // your team is the one who actually applies this: whatever percentage
+  // is set here is just what gets SHOWN to the organizer on the
+  // withdrawal form, so they know what to expect before requesting a
+  // payout. Change this number to whatever percentage you want to keep.
+  var PLATFORM_FEE_PERCENT = 5;
   // Withdrawals aren't paid out automatically at all — every request
   // just collects the organizer's PayPal email and tag(s) and notifies
   // the FundMyHope team, who send the money and follow up by hand.
@@ -1282,14 +1354,32 @@
 
   function renderAuthSlot(){
     var el = document.getElementById('auth-slot');
+    var drawerNameEl = document.getElementById('drawer-user-name');
+    var drawerLinksEl = document.getElementById('drawer-auth-links');
+
     if(!state.user){
       el.innerHTML =
         '<button class="btn btn-ghost" id="btn-login">Log in</button>' +
         '<button class="btn btn-gold" id="btn-signup">Sign up</button>';
       document.getElementById('btn-login').addEventListener('click', function(){ openModal('login'); });
       document.getElementById('btn-signup').addEventListener('click', function(){ openModal('signup'); });
+
+      if(drawerNameEl){ drawerNameEl.textContent = ''; }
+      if(drawerLinksEl){
+        drawerLinksEl.innerHTML =
+          '<a href="index.html" data-nav="create" class="drawer-link drawer-cta">Start a fundraiser</a>' +
+          '<button type="button" class="drawer-link" id="drawer-login-btn">Log in</button>' +
+          '<button type="button" class="drawer-link drawer-cta" id="drawer-signup-btn" style="margin-top:8px;">Sign up</button>';
+        drawerLinksEl.querySelectorAll('[data-nav]').forEach(bindNav);
+        drawerLinksEl.querySelectorAll('.drawer-link').forEach(function(a){
+          a.addEventListener('click', function(){ closeNavDrawer(); });
+        });
+        document.getElementById('drawer-login-btn').addEventListener('click', function(){ openModal('login'); });
+        document.getElementById('drawer-signup-btn').addEventListener('click', function(){ openModal('signup'); });
+      }
       return;
     }
+
     el.innerHTML =
       '<div class="avatar-pill" id="avatar-pill">' +
         '<div class="avatar-circle">' + userInitials(state.user.name) + '</div>' +
@@ -1299,6 +1389,36 @@
       e.stopPropagation();
       toggleUserMenu();
     });
+
+    if(drawerNameEl){ drawerNameEl.textContent = state.user.name; }
+    if(drawerLinksEl){
+      drawerLinksEl.innerHTML =
+        '<a href="index.html" data-nav="create" class="drawer-link drawer-cta">Start a fundraiser</a>' +
+        '<button type="button" class="drawer-link" id="drawer-my-causes-btn">My fundraisers</button>' +
+        '<button type="button" class="drawer-link drawer-logout" id="drawer-logout-btn">Log out</button>';
+      drawerLinksEl.querySelectorAll('[data-nav]').forEach(bindNav);
+      document.getElementById('drawer-my-causes-btn').addEventListener('click', function(){
+        closeNavDrawer();
+        state.searchTerm = '';
+        state.activeCategory = 'All';
+        state.myCausesOnly = true;
+        switchView('home'); renderHome();
+      });
+      document.getElementById('drawer-logout-btn').addEventListener('click', function(){
+        closeNavDrawer();
+        logout();
+      });
+      drawerLinksEl.querySelectorAll('.drawer-link').forEach(function(a){
+        if(a.id !== 'drawer-my-causes-btn' && a.id !== 'drawer-logout-btn'){
+          a.addEventListener('click', function(){ closeNavDrawer(); });
+        }
+      });
+    }
+  }
+
+  function closeNavDrawer(){
+    var drawer = document.getElementById('nav-drawer');
+    if(drawer){ drawer.classList.remove('open'); }
   }
 
   function toggleUserMenu(){
@@ -1354,6 +1474,16 @@
 
     if(state.modal === 'signup-otp'){
       renderOtpModal(root);
+      return;
+    }
+
+    if(state.modal === 'donation-success'){
+      renderDonationSuccessModal(root);
+      return;
+    }
+
+    if(state.modal === 'donation-failed'){
+      renderDonationFailedModal(root);
       return;
     }
 
@@ -1482,6 +1612,45 @@
     });
   }
 
+  function renderDonationSuccessModal(root){
+    var info = state.donationSuccessInfo || {};
+    var firstName = (info.name || 'there').split(' ')[0];
+    root.innerHTML =
+      '<div class="modal-overlay" id="modal-overlay">' +
+        '<div class="modal-box">' +
+          '<button class="modal-close" id="modal-close" aria-label="Close">&times;</button>' +
+          '<img class="modal-logo" src="' + LOGO_FULL_DATA_URI + '" alt="FundMyHope">' +
+          '<h3>Thank you, ' + escapeHtml(firstName) + '!</h3>' +
+          '<p class="modal-sub">Your gift of ' + fmt(info.amount || 0) + (info.tip > 0 ? ' (plus a ' + fmt(info.tip) + ' tip for FundMyHope)' : '') + ' just went through. The organizer will see it, and it\'s already reflected in the campaign\'s total.</p>' +
+          '<button type="button" id="donation-success-done" class="btn btn-gold btn-full">Done</button>' +
+        '</div>' +
+      '</div>';
+    document.getElementById('modal-close').addEventListener('click', closeModal);
+    document.getElementById('donation-success-done').addEventListener('click', closeModal);
+    document.getElementById('modal-overlay').addEventListener('click', function(e){
+      if(e.target.id === 'modal-overlay'){ closeModal(); }
+    });
+  }
+
+  function renderDonationFailedModal(root){
+    var message = state.donationFailedMessage || 'Your payment did not go through. Please try again.';
+    root.innerHTML =
+      '<div class="modal-overlay" id="modal-overlay">' +
+        '<div class="modal-box">' +
+          '<button class="modal-close" id="modal-close" aria-label="Close">&times;</button>' +
+          '<img class="modal-logo" src="' + LOGO_FULL_DATA_URI + '" alt="FundMyHope">' +
+          '<h3>Payment didn&rsquo;t go through</h3>' +
+          '<p class="modal-sub">' + escapeHtml(message) + '</p>' +
+          '<button type="button" id="donation-failed-retry" class="btn btn-gold btn-full">Try again</button>' +
+        '</div>' +
+      '</div>';
+    document.getElementById('modal-close').addEventListener('click', closeModal);
+    document.getElementById('donation-failed-retry').addEventListener('click', closeModal);
+    document.getElementById('modal-overlay').addEventListener('click', function(e){
+      if(e.target.id === 'modal-overlay'){ closeModal(); }
+    });
+  }
+
   function renderWithdrawModal(root){
     var wc = state.campaigns.find(function(x){ return x.id === state.withdrawCampaignId; });
     if(!wc){ closeModal(); return; }
@@ -1512,6 +1681,7 @@
                 '<input type="text" id="w-id-number" placeholder="As it appears on the ID" maxlength="40" required></div>' +
                 '<div class="form-field"><label for="w-amount">Amount to withdraw</label>' +
                 '<input type="number" id="w-amount" min="1" max="' + available + '" step="1" value="' + available + '" required></div>' +
+                '<div class="tip-note" id="w-fee-note"></div>' +
                 '<div class="form-field"><label for="w-paypal">PayPal email</label>' +
                 '<input type="email" id="w-paypal" placeholder="you@example.com" maxlength="120" required></div>' +
                 '<div class="form-field"><label for="w-tags">Tag(s)</label>' +
@@ -1526,6 +1696,20 @@
     document.getElementById('modal-overlay').addEventListener('click', function(e){
       if(e.target.id === 'modal-overlay'){ closeModal(); }
     });
+
+    var wAmountInput = document.getElementById('w-amount');
+    var feeNoteEl = document.getElementById('w-fee-note');
+    function updateFeeNote(){
+      if(!wAmountInput || !feeNoteEl){ return; }
+      var requested = parseFloat(wAmountInput.value) || 0;
+      var fee = Math.round(requested * PLATFORM_FEE_PERCENT) / 100;
+      var net = requested - fee;
+      feeNoteEl.textContent = 'After our ' + PLATFORM_FEE_PERCENT + '% platform fee (' + fmt(fee) + '), you\'ll receive ' + fmt(net) + '.';
+    }
+    if(wAmountInput){
+      updateFeeNote();
+      wAmountInput.addEventListener('input', updateFeeNote);
+    }
 
     var form = document.getElementById('withdraw-form');
     if(form){
@@ -1577,11 +1761,14 @@
   async function requestWithdrawal(c, amount, payoutInfo){
     var newWithdrawn = Number(c.withdrawn || 0) + amount;
     if(payoutInfo){
+      var platformFee = Math.round(amount * PLATFORM_FEE_PERCENT) / 100;
+      var netAmount = amount - platformFee;
       try{
         await apiRequest('/notify-manual-withdrawal', {
           method: 'POST',
           body: JSON.stringify({
             campaignId: c.id, campaignTitle: c.title, amount: amount,
+            platformFeePercent: PLATFORM_FEE_PERCENT, platformFee: platformFee, netAmount: netAmount,
             organizerId: c.organizerId, paypalEmail: payoutInfo.paypalEmail, tags: payoutInfo.tags,
             legalName: payoutInfo.legalName, idType: payoutInfo.idType, idNumber: payoutInfo.idNumber
           })
@@ -1878,6 +2065,109 @@
   }
 
   // ---------- Rendering: Detail ----------
+  // Finishes recording a donation whose payment already succeeded via
+  // Flutterwave's redirect return (see handleFlutterwaveRedirectReturn
+  // below) — i.e. the JS callback in the donate form never got to run
+  // because the browser did a full-page redirect instead of keeping
+  // the checkout in an overlay. Mirrors the success path inside the
+  // donate form's own submit handler.
+  async function recordSuccessfulDonation(pending){
+    var amt = pending.amount;
+    var nameVal = pending.name || 'Anonymous';
+    var emailVal = pending.email || '';
+    var msgVal = pending.message || '';
+    var anon = !!pending.anonymous;
+    var campaignId = pending.campaignId;
+
+    if(SUPABASE_URL){
+      await supabaseRest('/donations', {
+        method: 'POST',
+        headers: { 'Prefer': 'return=minimal' },
+        body: JSON.stringify({
+          campaign_id: campaignId,
+          donor_id: state.user ? state.user.id : null,
+          name: nameVal, amount: amt, message: msgVal || null, anonymous: anon
+        })
+      });
+      var idx = state.campaigns.findIndex(function(x){ return x.id === campaignId; });
+      try{
+        var rows = await supabaseRest('/campaigns?id=eq.' + encodeURIComponent(campaignId) + '&select=*,donations(*)');
+        var updated = mapDbCampaign(rows[0]);
+        if(idx > -1){ state.campaigns[idx] = updated; }
+      }catch(refetchErr){
+        if(idx > -1){
+          state.campaigns[idx].raised += amt;
+          state.campaigns[idx].donations.unshift({
+            name: nameVal, amount: amt, message: msgVal, anon: anon,
+            date: new Date().toISOString(),
+            donorId: state.user ? state.user.id : null
+          });
+        }
+      }
+    }
+
+    state.donationSuccessInfo = { amount: amt, name: nameVal, tip: pending.tip || 0 };
+    if(state.view === 'detail' && state.currentId === campaignId){ renderDetail(); }
+    openModal('donation-success');
+  }
+
+  // Flutterwave's checkout doesn't always stay in an in-page overlay —
+  // on many mobile browsers it takes over the whole page and only
+  // returns via a redirect (with ?status=&tx_ref=&transaction_id= in
+  // the URL), which means the donate form's own JS callback never
+  // gets to run. This runs once at boot and picks up that return,
+  // verifying the charge and showing the success/failure modal that
+  // the inline flow would otherwise have shown.
+  async function handleFlutterwaveRedirectReturn(){
+    var params = new URLSearchParams(window.location.search);
+    var status = params.get('status');
+    var transactionId = params.get('transaction_id');
+    if(!status && !transactionId){ return; }
+
+    // Strip these from the URL immediately so refreshing the page (or
+    // the bfcache restoring this exact URL later) can't reprocess the
+    // same result twice.
+    var cleanUrl = window.location.pathname + window.location.hash;
+    history.replaceState(null, '', cleanUrl);
+
+    var pendingRaw = null;
+    try{ pendingRaw = sessionStorage.getItem('fmh_pending_donation'); }catch(storageErr){}
+    var pending = null;
+    if(pendingRaw){
+      try{ pending = JSON.parse(pendingRaw); }catch(parseErr){}
+    }
+    try{ sessionStorage.removeItem('fmh_pending_donation'); }catch(storageErr){}
+
+    if(status !== 'successful' && status !== 'completed'){
+      state.donationFailedMessage = 'Your payment did not go through. Please try again.';
+      openModal('donation-failed');
+      return;
+    }
+    if(!transactionId){
+      state.donationFailedMessage = 'Your payment could not be confirmed. Please try again or contact support.';
+      openModal('donation-failed');
+      return;
+    }
+    try{
+      var verifyRes = await apiRequest('/flutterwave/verify/' + encodeURIComponent(transactionId), { method: 'GET' });
+      if(!verifyRes || verifyRes.status !== 'success'){
+        throw new Error('Payment could not be verified.');
+      }
+      if(!pending){
+        // Verified on Flutterwave's side, but we lost the donation's
+        // details (e.g. sessionStorage was cleared) — better to be
+        // honest about that than to silently drop a real payment.
+        state.donationFailedMessage = 'Your payment succeeded, but we lost track of the details on this device. Please contact support with this reference: ' + transactionId;
+        openModal('donation-failed');
+        return;
+      }
+      await recordSuccessfulDonation(pending);
+    }catch(err){
+      state.donationFailedMessage = (pending ? 'Your payment may have succeeded, but we could not confirm it. ' : '') + 'Please contact support' + (transactionId ? ' with this reference: ' + transactionId : '') + '.';
+      openModal('donation-failed');
+    }
+  }
+
   function openDetailInternal(id){
     state.currentId = id;
     state.selectedAmount = 50;
@@ -2017,6 +2307,12 @@
             '<textarea id="d-msg" rows="2" maxlength="200" placeholder="Say something to the organizer"></textarea>' +
           '</div>' +
           '<div class="checkline"><input type="checkbox" id="d-anon"> <label for="d-anon" style="margin:0;">Give anonymously</label></div>' +
+          '<div class="field tip-field">' +
+            '<label>Add a tip to support FundMyHope <span style="font-weight:400; color:var(--ink-faint);">(optional)</span></label>' +
+            '<div class="tip-grid" id="tip-grid"></div>' +
+            '<input type="number" id="d-tip-custom" min="0" step="1" placeholder="Custom tip amount" style="margin-top:8px;">' +
+            '<div class="tip-note" id="tip-note"></div>' +
+          '</div>' +
           '<div class="pay-section">' +
             '<div class="pay-section-label">Payment <span class="pay-badge">Flutterwave</span></div>' +
             '<div class="card-field-group" id="card-field-group">' +
@@ -2044,7 +2340,7 @@
         // doesn't tear down and rebuild the form mid-interaction.
         ag.querySelectorAll('.amount-btn').forEach(function(b){ b.classList.remove('selected'); });
         btn.classList.add('selected');
-        document.querySelector('#donate-form button[type="submit"]').textContent = 'Give ' + fmt(state.selectedAmount);
+        updateGiveButtonLabel();
       });
     });
 
@@ -2053,10 +2349,60 @@
       var v = parseInt(customInput.value, 10);
       if(v > 0){
         state.selectedAmount = v;
-        document.querySelector('#donate-form button[type="submit"]').textContent = 'Give ' + fmt(v);
+        updateGiveButtonLabel();
         ag.querySelectorAll('.amount-btn').forEach(function(b){ b.classList.remove('selected'); });
       }
     });
+
+    // ---- Tip (optional, on top of the donation — goes to FundMyHope, not the campaign) ----
+    var tipOptions = [0, 10, 15, 20];
+    var tg = document.getElementById('tip-grid');
+    function renderTipChips(){
+      tg.innerHTML = tipOptions.map(function(p){
+        var isSelected = state.tipCustomAmount == null && state.selectedTipPercent === p;
+        return '<button type="button" class="tip-btn' + (isSelected ? ' selected' : '') + '" data-tip="' + p + '">' + p + '%</button>';
+      }).join('');
+      tg.querySelectorAll('.tip-btn').forEach(function(btn){
+        btn.addEventListener('click', function(){
+          state.selectedTipPercent = parseInt(btn.getAttribute('data-tip'), 10);
+          state.tipCustomAmount = null;
+          document.getElementById('d-tip-custom').value = '';
+          renderTipChips();
+          updateGiveButtonLabel();
+        });
+      });
+    }
+    renderTipChips();
+
+    var tipCustomInput = document.getElementById('d-tip-custom');
+    tipCustomInput.addEventListener('input', function(){
+      var v = parseFloat(tipCustomInput.value);
+      state.tipCustomAmount = (tipCustomInput.value !== '' && v >= 0) ? v : null;
+      if(state.tipCustomAmount != null){
+        tg.querySelectorAll('.tip-btn').forEach(function(b){ b.classList.remove('selected'); });
+      } else {
+        renderTipChips();
+      }
+      updateGiveButtonLabel();
+    });
+
+    function computeTipAmount(){
+      if(state.tipCustomAmount != null){ return state.tipCustomAmount; }
+      return Math.round(state.selectedAmount * (state.selectedTipPercent || 0)) / 100;
+    }
+    function updateGiveButtonLabel(){
+      var tip = computeTipAmount();
+      var total = state.selectedAmount + tip;
+      var submitBtnEl = document.querySelector('#donate-form button[type="submit"]');
+      if(submitBtnEl){ submitBtnEl.textContent = 'Give ' + fmt(total); }
+      var noteEl = document.getElementById('tip-note');
+      if(noteEl){
+        noteEl.textContent = tip > 0
+          ? (fmt(state.selectedAmount) + ' to the fundraiser + ' + fmt(tip) + ' tip = ' + fmt(total) + ' total')
+          : (fmt(state.selectedAmount) + ' to the fundraiser, no tip added');
+      }
+    }
+    updateGiveButtonLabel();
 
     if(state.user){
       var dName = document.getElementById('d-name');
@@ -2161,6 +2507,8 @@
     document.getElementById('donate-form').addEventListener('submit', async function(e){
       e.preventDefault();
       var amt = state.selectedAmount;
+      var tipAmt = computeTipAmount();
+      var totalCharge = amt + tipAmt;
       var nameVal = document.getElementById('d-name').value.trim() || 'Anonymous';
       var emailVal = document.getElementById('d-email').value.trim();
       var msgVal = document.getElementById('d-msg').value.trim();
@@ -2185,18 +2533,41 @@
         if(flutterwaveReady && API_BASE){
           // Real payment: Flutterwave's inline widget collects the card
           // or bank details itself, using only the PUBLIC key — nothing
-          // sensitive ever touches this page's JS or your server.
+          // sensitive ever touches this page's JS or your server. The
+          // tip (if any) is charged together with the donation as one
+          // transaction, but only `amt` (not the tip) gets credited to
+          // the campaign below — the tip is FundMyHope's, not the
+          // fundraiser's.
+          //
+          // On many mobile browsers Flutterwave's checkout takes over
+          // the whole page instead of staying in an overlay, and only
+          // returns via a redirect — the JS callback below never fires
+          // in that case. So we ALSO persist everything needed to
+          // finish recording this donation in sessionStorage, and set
+          // redirect_url so Flutterwave sends the browser back here
+          // with the result in the URL; a check at boot (see init())
+          // picks that up and finishes the job even after a full page
+          // reload. The callback below still fires (and still works)
+          // on browsers where the popup does stay in-page.
           var txRef = makeTxRef();
+          try{
+            sessionStorage.setItem('fmh_pending_donation', JSON.stringify({
+              txRef: txRef, campaignId: c.id, amount: amt, tip: tipAmt,
+              name: nameVal, email: emailVal, message: msgVal, anonymous: anon
+            }));
+          }catch(storageErr){ /* private browsing etc — redirect-return handling just won't have this to work with */ }
+          var redirectUrl = window.location.origin + window.location.pathname + '#campaign=' + encodeURIComponent(c.id);
           var flwResult = await new Promise(function(resolve, reject){
             FlutterwaveCheckout({
               public_key: FLUTTERWAVE_PUBLIC_KEY,
               tx_ref: txRef,
-              amount: amt,
+              amount: totalCharge,
               currency: 'USD', // must match what your Flutterwave account is enabled to collect in
               payment_options: 'card, banktransfer, ussd',
               customer: { email: emailVal, name: nameVal },
-              customizations: { title: 'FundMyHope', description: 'Donation to ' + c.title },
-              meta: { campaignId: c.id },
+              customizations: { title: 'FundMyHope', description: 'Donation to ' + c.title + (tipAmt > 0 ? ' (includes tip)' : '') },
+              meta: { campaignId: c.id, donationAmount: amt, tipAmount: tipAmt },
+              redirect_url: redirectUrl,
               callback: function(response){
                 if(response && (response.status === 'successful' || response.status === 'completed')){
                   resolve(response);
@@ -2215,6 +2586,7 @@
           if(!verifyRes || verifyRes.status !== 'success'){
             throw new Error('Payment could not be verified. Please try again or contact support.');
           }
+          try{ sessionStorage.removeItem('fmh_pending_donation'); }catch(storageErr){}
         } else {
           // No Flutterwave backend configured — simulate the processing delay.
           await new Promise(function(resolve){ setTimeout(resolve, 700); });
@@ -2264,13 +2636,27 @@
 
         showToast('Thank you — your ' + fmt(amt) + ' gift was added.');
         state.selectedAmount = 50;
+        state.donationSuccessInfo = { amount: amt, name: nameVal, tip: tipAmt };
+        state.selectedTipPercent = 10;
+        state.tipCustomAmount = null;
         renderDetail();
+        openModal('donation-success');
       } catch(err){
-        cardErrorEl.textContent = err.message || 'Something went wrong processing that card. Please try again.';
-        cardErrorEl.classList.add('show');
-        document.getElementById('card-field-group').classList.add('invalid');
         submitBtn.disabled = false;
         submitBtn.textContent = originalLabel;
+        if(flutterwaveReady && API_BASE){
+          // A real payment attempt failed (card declined, popup closed
+          // before finishing, verification mismatch, etc.) — a modal is
+          // more reliable feedback than an inline message here, since
+          // the person may have switched apps during the Flutterwave
+          // popup and only look back at the page well after this runs.
+          state.donationFailedMessage = err.message || 'Your payment did not go through. Please try again.';
+          openModal('donation-failed');
+        } else {
+          cardErrorEl.textContent = err.message || 'Something went wrong processing that card. Please try again.';
+          cardErrorEl.classList.add('show');
+          document.getElementById('card-field-group').classList.add('invalid');
+        }
       }
     });
   }
@@ -2307,16 +2693,19 @@
     var sub = document.getElementById('create-sub');
     var submitBtn = document.getElementById('create-submit-btn');
     var cancelBtn = document.getElementById('create-cancel-btn');
+    var vettingSection = document.getElementById('create-vetting-section');
     if(mode === 'edit'){
       heading.textContent = 'Edit your fundraiser';
       sub.textContent = 'Update the photo, story, goal, or category — supporters will see your changes right away.';
       submitBtn.textContent = 'Save changes';
       cancelBtn.classList.remove('hidden');
+      if(vettingSection){ vettingSection.classList.add('hidden'); }
     } else {
       heading.textContent = 'Start a fundraiser';
       sub.textContent = "Tell people plainly what's happened and what the money is for. Specific, honest stories raise more than polished ones.";
       submitBtn.textContent = 'Publish fundraiser';
       cancelBtn.classList.add('hidden');
+      if(vettingSection){ vettingSection.classList.remove('hidden'); }
     }
   }
 
@@ -2438,15 +2827,23 @@
     var goal = parseInt(document.getElementById('f-goal').value, 10);
     var organizer = document.getElementById('f-organizer').value.trim();
     var story = document.getElementById('f-story').value.trim();
+    var legalName = document.getElementById('f-legal-name').value.trim();
+    var idType = document.getElementById('f-id-type').value;
+    var idNumber = document.getElementById('f-id-number').value.trim();
     var accentNode = document.querySelector('#swatch-row .swatch.selected');
     var accent = accentNode ? accentNode.getAttribute('data-accent') : ACCENT_KEYS[0];
+
+    var isEdit = !!state.editingId;
 
     if(!title || !goal || !organizer || !story){
       showToast('Fill in every field to publish.');
       return;
     }
+    if(!isEdit && (!legalName || !idType || !idNumber)){
+      showToast('Add your legal name and a valid ID so we can verify this fundraiser before it goes live.');
+      return;
+    }
 
-    var isEdit = !!state.editingId;
     if(isEdit){
       var existing = state.campaigns.find(function(x){ return x.id === state.editingId; });
       if(!existing || !state.user || existing.organizerId !== state.user.id){
@@ -2522,7 +2919,8 @@
         var payload = {
           title: title, category: category, organizer: organizer,
           organizer_id: state.user.id, goal: goal, story: story, accent: accent,
-          image_url: imageUrl
+          image_url: imageUrl,
+          organizer_legal_name: legalName, organizer_id_type: idType, organizer_id_number: idNumber
         };
         var rows = await supabaseRest('/campaigns', {
           method: 'POST',
@@ -2654,8 +3052,25 @@
         openDetailInternal(sharedId);
       }
     }
+
+    // Pick up a Flutterwave redirect return (see the big comment on
+    // handleFlutterwaveRedirectReturn above) — must run after
+    // campaigns are loaded and the right campaign is open, since it
+    // may need to update that campaign's raised total.
+    await handleFlutterwaveRedirectReturn();
   })();
+
+  // Some mobile browsers restore a fully frozen snapshot of the page
+  // (including a stuck "Processing…" button or a leftover error
+  // message) when you navigate back to it — e.g. returning from
+  // Flutterwave's checkout — instead of properly reloading. Force a
+  // real reload in that specific case so the page never gets stuck
+  // showing stale state.
+  window.addEventListener('pageshow', function(e){
+    if(e.persisted){ window.location.reload(); }
+  });
 })();
 </script>
 </body>
+
 </html>

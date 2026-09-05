@@ -2192,7 +2192,7 @@
               public_key: FLUTTERWAVE_PUBLIC_KEY,
               tx_ref: txRef,
               amount: amt,
-              currency: 'NGN', // must match what routes/flutterwave.js verifies against
+              currency: 'USD', // must match what your Flutterwave account is enabled to collect in
               payment_options: 'card, banktransfer, ussd',
               customer: { email: emailVal, name: nameVal },
               customizations: { title: 'FundMyHope', description: 'Donation to ' + c.title },

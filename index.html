@@ -666,13 +666,24 @@
   .drawer-link{ color: #F4EFDF; text-decoration: none; padding: 14px 4px; border-bottom: 1px solid rgba(244,239,223,0.14); font-size: 16px; font-family: 'Fraunces', serif; }
   .drawer-link.drawer-cta{ margin-top: 14px; border: none; background: var(--gold); color: #2A1C05; border-radius: 4px; padding: 12px 14px; text-align: center; font-family: 'Inter', sans-serif; font-weight: 600; font-size: 14.5px; }
   button.drawer-link{
-    width: 100%; background: none; text-align: left;
-    border: none; border-bottom: 1px solid rgba(244,239,223,0.14);
-    -webkit-appearance: none; appearance: none;
+    display: block;
+    width: 100% !important;
+    background: transparent !important; background-color: transparent !important;
+    background-image: none !important;
+    text-align: left;
+    border: none !important; border-bottom: 1px solid rgba(244,239,223,0.14) !important;
+    border-radius: 0 !important;
+    box-shadow: none !important; outline: none !important;
+    -webkit-appearance: none !important; appearance: none !important;
     font-family: inherit; font-size: inherit; color: inherit;
-    margin: 0; cursor: pointer;
+    margin: 0; padding: 14px 4px; cursor: pointer;
   }
-  button.drawer-link.drawer-cta{ border: none; }
+  button.drawer-link.drawer-cta{
+    border-bottom: none !important;
+  }
+  button.drawer-link:focus, button.drawer-link:active{
+    outline: none !important; box-shadow: none !important;
+  }
   .drawer-link.drawer-logout{ color: #E7A9A0; }
   .avatar-pill{
     display: flex; align-items: center; gap: 8px;
@@ -740,6 +751,8 @@
   .modal-error.show{ display: block; }
   .modal-switch{ margin-top: 16px; font-size: 13.5px; color: var(--ink-soft); text-align: center; }
   .modal-switch a{ color: var(--green); font-weight: 600; text-decoration: underline; cursor: pointer; }
+  .modal-switch a.disabled{ color: var(--ink-faint); text-decoration: none; cursor: default; pointer-events: none; }
+  #otp-resend-cooldown{ color: var(--ink-faint); font-weight: 600; }
 
   /* ---------- Payment panel ---------- */
   .pay-section{ margin-top: 18px; border-top: 1px solid var(--border); padding-top: 16px; }
@@ -1096,7 +1109,7 @@
   //      endpoint) before the donation is recorded — never trust the
   //      client-side callback alone, since it can be spoofed.
   var API_BASE = 'https://fundmyhope-server.onrender.com/api';
-  var FLUTTERWAVE_PUBLIC_KEY = 'FLWPUBK_TEST-c6d916c34cddc4147f6563b157df95d9-X';
+  var FLUTTERWAVE_PUBLIC_KEY = 'FLWPUBK-08efa31329a2f7f5c0efe23f1f195b94-X';
   // FundMyHope's own cut, taken out of each withdrawal payout — this is
   // NOT something Flutterwave charges or knows about; Flutterwave only
   // charges its own processing fee on the original donation. Since
@@ -1548,6 +1561,7 @@
         if(user && user.needsOtp){
           state.pendingOtpEmail = user.email;
           state.pendingOtpName = user.name;
+          state.otpResendAvailableAt = Date.now() + 60000;
           openModal('signup-otp');
           return;
         }
@@ -1572,14 +1586,14 @@
           '<button class="modal-close" id="modal-close" aria-label="Close">&times;</button>' +
           '<img class="modal-logo" src="' + LOGO_FULL_DATA_URI + '" alt="FundMyHope">' +
           '<h3>Check your email</h3>' +
-          '<p class="modal-sub">We sent a 6-digit code to ' + escapeHtml(email) + '.</p>' +
+          '<p class="modal-sub">We sent a verification code to ' + escapeHtml(email) + '.</p>' +
           '<div class="modal-error" id="modal-error"></div>' +
           '<form id="otp-form">' +
             '<div class="form-field"><label for="a-otp">Verification code</label>' +
-            '<input type="text" id="a-otp" inputmode="numeric" pattern="[0-9]*" maxlength="6" required autocomplete="one-time-code" placeholder="123456"></div>' +
+            '<input type="text" id="a-otp" inputmode="numeric" pattern="[0-9]*" maxlength="12" required autocomplete="one-time-code" placeholder="Enter the code from your email"></div>' +
             '<button type="submit" class="btn btn-gold btn-full">Verify &amp; continue</button>' +
           '</form>' +
-          '<div class="modal-switch">Didn&rsquo;t get it? <a id="otp-resend-link">Resend code</a></div>' +
+          '<div class="modal-switch">Didn&rsquo;t get it? <a id="otp-resend-link">Resend code</a><span id="otp-resend-cooldown"></span></div>' +
         '</div>' +
       '</div>';
 
@@ -1587,9 +1601,40 @@
     document.getElementById('modal-overlay').addEventListener('click', function(e){
       if(e.target.id === 'modal-overlay'){ closeModal(); }
     });
-    document.getElementById('otp-resend-link').addEventListener('click', async function(){
+
+    var resendLink = document.getElementById('otp-resend-link');
+    var cooldownEl = document.getElementById('otp-resend-cooldown');
+    var cooldownTimer = null;
+
+    function tickCooldown(){
+      // The modal may have been closed since this interval was set up
+      // (closeModal empties #modal-root) — stop ticking once that
+      // happens instead of running forever in the background.
+      if(!document.body.contains(resendLink)){
+        clearInterval(cooldownTimer);
+        return;
+      }
+      var msLeft = (state.otpResendAvailableAt || 0) - Date.now();
+      if(msLeft <= 0){
+        clearInterval(cooldownTimer);
+        cooldownTimer = null;
+        resendLink.classList.remove('disabled');
+        cooldownEl.textContent = '';
+        return;
+      }
+      var secondsLeft = Math.ceil(msLeft / 1000);
+      resendLink.classList.add('disabled');
+      cooldownEl.textContent = ' (' + secondsLeft + 's)';
+    }
+    tickCooldown();
+    cooldownTimer = setInterval(tickCooldown, 1000);
+
+    resendLink.addEventListener('click', async function(){
+      if(resendLink.classList.contains('disabled')){ return; }
       try{
         await resendSignupOtp(email);
+        state.otpResendAvailableAt = Date.now() + 60000;
+        tickCooldown();
         showToast('Sent a new code to ' + email + '.');
       }catch(err){
         showToast(err.message || 'Could not resend the code.');

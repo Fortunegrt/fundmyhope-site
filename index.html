@@ -664,6 +664,7 @@
   .nav-drawer-close{ background: none; border: none; color: #F4EFDF; font-size: 28px; line-height: 1; cursor: pointer; padding: 4px; }
   .drawer-top-row{ display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
   .drawer-user-name{ font-family: 'Fraunces', serif; font-size: 16px; color: #F4EFDF; opacity: 0.9; }
+  .drawer-user-name.clickable{ cursor: pointer; text-decoration: underline; opacity: 1; }
   .drawer-link{
     display: block; width: 100%; box-sizing: border-box;
     color: #F4EFDF; text-decoration: none; padding: 14px 4px;
@@ -757,6 +758,8 @@
   }
   .modal-error.show{ display: block; }
   .modal-switch{ margin-top: 16px; font-size: 13.5px; color: var(--ink-soft); text-align: center; }
+  .modal-forgot{ margin: -8px 0 16px; text-align: right; font-size: 13px; }
+  .modal-forgot a{ color: var(--teal); text-decoration: underline; cursor: pointer; }
   .modal-switch a{ color: var(--green); font-weight: 600; text-decoration: underline; cursor: pointer; }
   .modal-switch a.disabled{ color: var(--ink-faint); text-decoration: none; cursor: default; pointer-events: none; }
   #otp-resend-cooldown{ color: var(--ink-faint); font-weight: 600; }
@@ -1349,6 +1352,7 @@
       id: data.user ? data.user.id : state.user.id,
       name: state.user.name || meta.name || (data.user && data.user.email),
       email: data.user ? data.user.email : state.user.email,
+      avatarUrl: meta.avatar_url || state.user.avatarUrl,
       accessToken: data.access_token,
       refreshToken: data.refresh_token
     };
@@ -1391,7 +1395,11 @@
       document.getElementById('btn-login').addEventListener('click', function(){ openModal('login'); });
       document.getElementById('btn-signup').addEventListener('click', function(){ openModal('signup'); });
 
-      if(drawerNameEl){ drawerNameEl.textContent = ''; }
+      if(drawerNameEl){
+        drawerNameEl.textContent = '';
+        drawerNameEl.classList.remove('clickable');
+        drawerNameEl.onclick = null;
+      }
       if(drawerLinksEl){
         drawerLinksEl.innerHTML =
           '<a href="index.html" data-nav="create" class="drawer-link">Start a fundraiser</a>' +
@@ -1417,7 +1425,11 @@
       toggleUserMenu();
     });
 
-    if(drawerNameEl){ drawerNameEl.textContent = state.user.name; }
+    if(drawerNameEl){
+      drawerNameEl.textContent = state.user.name;
+      drawerNameEl.classList.add('clickable');
+      drawerNameEl.onclick = function(){ closeNavDrawer(); openModal('account-settings'); };
+    }
     if(drawerLinksEl){
       drawerLinksEl.innerHTML =
         '<a href="index.html" data-nav="create" class="drawer-link">Start a fundraiser</a>' +
@@ -1514,6 +1526,21 @@
       return;
     }
 
+    if(state.modal === 'forgot-password'){
+      renderForgotPasswordModal(root);
+      return;
+    }
+
+    if(state.modal === 'reset-password'){
+      renderResetPasswordModal(root);
+      return;
+    }
+
+    if(state.modal === 'account-settings'){
+      renderAccountSettingsModal(root);
+      return;
+    }
+
     var isLogin = state.modal === 'login';
     root.innerHTML =
       '<div class="modal-overlay" id="modal-overlay">' +
@@ -1531,6 +1558,7 @@
             '<input type="email" id="a-email" required maxlength="120"></div>' +
             '<div class="form-field"><label for="a-password">Password</label>' +
             '<input type="password" id="a-password" required minlength="6" maxlength="72"></div>' +
+            (isLogin ? '<div class="modal-forgot"><a id="forgot-password-link">Forgot password?</a></div>' : '') +
             '<button type="submit" class="btn btn-gold btn-full">' + (isLogin ? 'Log in' : 'Sign up') + '</button>' +
           '</form>' +
           '<div class="modal-switch">' +
@@ -1547,6 +1575,10 @@
     document.getElementById('modal-switch-link').addEventListener('click', function(){
       openModal(isLogin ? 'signup' : 'login');
     });
+    var forgotLink = document.getElementById('forgot-password-link');
+    if(forgotLink){
+      forgotLink.addEventListener('click', function(){ openModal('forgot-password'); });
+    }
     document.getElementById('auth-form').addEventListener('submit', async function(e){
       e.preventDefault();
       var errEl = document.getElementById('modal-error');
@@ -1707,6 +1739,261 @@
     document.getElementById('donation-failed-retry').addEventListener('click', closeModal);
     document.getElementById('modal-overlay').addEventListener('click', function(e){
       if(e.target.id === 'modal-overlay'){ closeModal(); }
+    });
+  }
+
+  function renderForgotPasswordModal(root){
+    root.innerHTML =
+      '<div class="modal-overlay" id="modal-overlay">' +
+        '<div class="modal-box">' +
+          '<button class="modal-close" id="modal-close" aria-label="Close">&times;</button>' +
+          '<img class="modal-logo" src="' + LOGO_FULL_DATA_URI + '" alt="FundMyHope">' +
+          '<h3>Reset your password</h3>' +
+          '<p class="modal-sub">Enter your email and we&rsquo;ll send you a link to set a new password.</p>' +
+          '<div class="modal-error" id="modal-error"></div>' +
+          '<form id="forgot-form">' +
+            '<div class="form-field"><label for="fp-email">Email</label>' +
+            '<input type="email" id="fp-email" required maxlength="120"></div>' +
+            '<button type="submit" class="btn btn-gold btn-full">Send reset link</button>' +
+          '</form>' +
+          '<div class="modal-switch">Remembered it? <a id="modal-switch-link">Log in</a></div>' +
+        '</div>' +
+      '</div>';
+
+    document.getElementById('modal-close').addEventListener('click', closeModal);
+    document.getElementById('modal-overlay').addEventListener('click', function(e){
+      if(e.target.id === 'modal-overlay'){ closeModal(); }
+    });
+    document.getElementById('modal-switch-link').addEventListener('click', function(){ openModal('login'); });
+    document.getElementById('forgot-form').addEventListener('submit', async function(e){
+      e.preventDefault();
+      var errEl = document.getElementById('modal-error');
+      errEl.classList.remove('show');
+      var email = document.getElementById('fp-email').value.trim().toLowerCase();
+      var submitBtn = e.target.querySelector('button[type="submit"]');
+      submitBtn.disabled = true;
+      var originalLabel = submitBtn.textContent;
+      submitBtn.textContent = 'Sending…';
+      try{
+        await supabaseAuth('/recover', {
+          email: email,
+          redirect_to: window.location.origin + window.location.pathname
+        });
+        closeModal();
+        showToast('Check ' + email + ' for a link to reset your password.');
+      }catch(err){
+        errEl.textContent = err.message || 'Could not send the reset link. Please try again.';
+        errEl.classList.add('show');
+        submitBtn.disabled = false;
+        submitBtn.textContent = originalLabel;
+      }
+    });
+  }
+
+  // Supabase's password-reset email links back to this site with
+  // #access_token=...&type=recovery in the URL — checked for at boot
+  // (see init()) so this modal opens automatically when someone
+  // arrives that way.
+  function renderResetPasswordModal(root){
+    root.innerHTML =
+      '<div class="modal-overlay" id="modal-overlay">' +
+        '<div class="modal-box">' +
+          '<img class="modal-logo" src="' + LOGO_FULL_DATA_URI + '" alt="FundMyHope">' +
+          '<h3>Set a new password</h3>' +
+          '<p class="modal-sub">Choose a new password for your account.</p>' +
+          '<div class="modal-error" id="modal-error"></div>' +
+          '<form id="reset-form">' +
+            '<div class="form-field"><label for="rp-password">New password</label>' +
+            '<input type="password" id="rp-password" required minlength="6" maxlength="72"></div>' +
+            '<button type="submit" class="btn btn-gold btn-full">Save new password</button>' +
+          '</form>' +
+        '</div>' +
+      '</div>';
+
+    // No close button on purpose — this modal only appears after
+    // arriving via a one-time recovery link, so there's nothing behind
+    // it to go "back" to yet.
+    document.getElementById('reset-form').addEventListener('submit', async function(e){
+      e.preventDefault();
+      var errEl = document.getElementById('modal-error');
+      errEl.classList.remove('show');
+      var password = document.getElementById('rp-password').value;
+      var submitBtn = e.target.querySelector('button[type="submit"]');
+      submitBtn.disabled = true;
+      var originalLabel = submitBtn.textContent;
+      submitBtn.textContent = 'Saving…';
+      try{
+        var data = await apiRequest_supabaseUserUpdate(state.recoveryAccessToken, { password: password });
+        var meta = (data.user_metadata) || {};
+        var user = {
+          id: data.id, name: meta.name || data.email, email: data.email,
+          accessToken: state.recoveryAccessToken, refreshToken: state.recoveryRefreshToken
+        };
+        await persistSession(user);
+        state.recoveryAccessToken = null;
+        state.recoveryRefreshToken = null;
+        history.replaceState(null, '', window.location.pathname + window.location.search);
+        closeModal();
+        showToast('Password updated — you\'re logged in.');
+      }catch(err){
+        errEl.textContent = err.message || 'Could not update your password. Please try again.';
+        errEl.classList.add('show');
+        submitBtn.disabled = false;
+        submitBtn.textContent = originalLabel;
+      }
+    });
+  }
+
+  // Supabase's own /user endpoint needs the recovery link's access
+  // token as the bearer (not the anon key like supabaseAuth() uses) —
+  // small enough to not be worth a whole separate helper file for.
+  async function apiRequest_supabaseUserUpdate(accessToken, body){
+    var res = await fetch(SUPABASE_URL + '/auth/v1/user', {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'apikey': SUPABASE_PUBLISHABLE_KEY,
+        'Authorization': 'Bearer ' + accessToken
+      },
+      body: JSON.stringify(body)
+    });
+    var data = await res.json();
+    if(!res.ok){ throw new Error((data && data.msg) || (data && data.error_description) || 'Request failed.'); }
+    return data;
+  }
+
+  function renderAccountSettingsModal(root){
+    var user = state.user;
+    root.innerHTML =
+      '<div class="modal-overlay" id="modal-overlay">' +
+        '<div class="modal-box">' +
+          '<button class="modal-close" id="modal-close" aria-label="Close">&times;</button>' +
+          '<img class="modal-logo" src="' + LOGO_FULL_DATA_URI + '" alt="FundMyHope">' +
+          '<h3>Account settings</h3>' +
+          '<p class="modal-sub">' + escapeHtml(user.email) + '</p>' +
+          '<div class="modal-error" id="modal-error"></div>' +
+
+          '<form id="account-name-form">' +
+            '<div class="form-field"><label for="acc-name">Public display name</label>' +
+            '<input type="text" id="acc-name" required maxlength="60" value="' + escapeHtml(user.name) + '"></div>' +
+            '<div style="font-size:12.5px; color:var(--ink-faint); margin:-8px 0 12px;">This is the name shown next to reviews and comments you post. It doesn&rsquo;t change the organizer name already saved on fundraisers you&rsquo;ve created.</div>' +
+            '<button type="submit" class="btn btn-outline btn-full">Save name</button>' +
+          '</form>' +
+
+          '<div style="height:1px; background:var(--border); margin:20px 0;"></div>' +
+
+          '<form id="account-avatar-form">' +
+            '<div class="form-field"><label for="acc-avatar">Profile picture</label>' +
+            '<input type="file" id="acc-avatar" accept="image/*"></div>' +
+            '<button type="submit" class="btn btn-outline btn-full">Upload photo</button>' +
+          '</form>' +
+
+          '<div style="height:1px; background:var(--border); margin:20px 0;"></div>' +
+
+          '<form id="account-password-form">' +
+            '<div class="form-field"><label for="acc-password">New password</label>' +
+            '<input type="password" id="acc-password" minlength="6" maxlength="72" placeholder="Leave blank to keep your current password"></div>' +
+            '<button type="submit" class="btn btn-outline btn-full">Change password</button>' +
+          '</form>' +
+
+          '<div style="height:1px; background:var(--border); margin:20px 0;"></div>' +
+
+          '<button type="button" id="acc-deactivate-btn" class="btn btn-full" style="background:var(--rose); color:#fff;">Deactivate account</button>' +
+          '<div style="font-size:12px; color:var(--ink-faint); margin-top:8px; text-align:center;">This logs you out and marks your account inactive. Contact us to reactivate it.</div>' +
+        '</div>' +
+      '</div>';
+
+    document.getElementById('modal-close').addEventListener('click', closeModal);
+    document.getElementById('modal-overlay').addEventListener('click', function(e){
+      if(e.target.id === 'modal-overlay'){ closeModal(); }
+    });
+
+    document.getElementById('account-name-form').addEventListener('submit', async function(e){
+      e.preventDefault();
+      var errEl = document.getElementById('modal-error');
+      errEl.classList.remove('show');
+      var newName = document.getElementById('acc-name').value.trim();
+      if(!newName){ return; }
+      var submitBtn = e.target.querySelector('button[type="submit"]');
+      submitBtn.disabled = true;
+      var originalLabel = submitBtn.textContent;
+      submitBtn.textContent = 'Saving…';
+      try{
+        await apiRequest_supabaseUserUpdate(state.user.accessToken, { data: { name: newName } });
+        state.user.name = newName;
+        await persistSession(state.user);
+        showToast('Display name updated.');
+      }catch(err){
+        errEl.textContent = err.message || 'Could not update your name.';
+        errEl.classList.add('show');
+      }finally{
+        submitBtn.disabled = false;
+        submitBtn.textContent = originalLabel;
+      }
+    });
+
+    document.getElementById('account-avatar-form').addEventListener('submit', async function(e){
+      e.preventDefault();
+      var errEl = document.getElementById('modal-error');
+      errEl.classList.remove('show');
+      var fileInput = document.getElementById('acc-avatar');
+      var file = fileInput.files && fileInput.files[0];
+      if(!file){ errEl.textContent = 'Choose a photo first.'; errEl.classList.add('show'); return; }
+      var submitBtn = e.target.querySelector('button[type="submit"]');
+      submitBtn.disabled = true;
+      var originalLabel = submitBtn.textContent;
+      submitBtn.textContent = 'Uploading…';
+      try{
+        var resized = await resizeImageFile(file, 480, 0.85);
+        var avatarUrl = await uploadCoverImage(resized.blob);
+        await apiRequest_supabaseUserUpdate(state.user.accessToken, { data: { avatar_url: avatarUrl } });
+        state.user.avatarUrl = avatarUrl;
+        await persistSession(state.user);
+        showToast('Profile picture updated.');
+      }catch(err){
+        errEl.textContent = err.message || 'Could not upload that photo.';
+        errEl.classList.add('show');
+      }finally{
+        submitBtn.disabled = false;
+        submitBtn.textContent = originalLabel;
+      }
+    });
+
+    document.getElementById('account-password-form').addEventListener('submit', async function(e){
+      e.preventDefault();
+      var errEl = document.getElementById('modal-error');
+      errEl.classList.remove('show');
+      var newPassword = document.getElementById('acc-password').value;
+      if(!newPassword){ return; }
+      var submitBtn = e.target.querySelector('button[type="submit"]');
+      submitBtn.disabled = true;
+      var originalLabel = submitBtn.textContent;
+      submitBtn.textContent = 'Saving…';
+      try{
+        await apiRequest_supabaseUserUpdate(state.user.accessToken, { password: newPassword });
+        document.getElementById('acc-password').value = '';
+        showToast('Password changed.');
+      }catch(err){
+        errEl.textContent = err.message || 'Could not change your password.';
+        errEl.classList.add('show');
+      }finally{
+        submitBtn.disabled = false;
+        submitBtn.textContent = originalLabel;
+      }
+    });
+
+    document.getElementById('acc-deactivate-btn').addEventListener('click', async function(){
+      if(!window.confirm('Deactivate your account? You\'ll be logged out, and will need to contact support to reactivate it.')){ return; }
+      try{
+        await apiRequest_supabaseUserUpdate(state.user.accessToken, { data: { deactivated: true } });
+      }catch(err){
+        // Even if this call fails, still log the person out locally —
+        // they asked to leave, and we shouldn't trap them in a broken
+        // deactivation attempt.
+      }
+      closeModal();
+      logout();
+      showToast('Your account has been deactivated.');
     });
   }
 
@@ -3139,6 +3426,19 @@
     // campaigns are loaded and the right campaign is open, since it
     // may need to update that campaign's raised total.
     await handleFlutterwaveRedirectReturn();
+
+    // Supabase's password-reset email links back here with
+    // #access_token=...&type=recovery — open the "set a new password"
+    // modal directly instead of the normal home/detail view.
+    var recoveryMatch = window.location.hash.match(/[#&]access_token=([^&]+)/);
+    var typeMatch = window.location.hash.match(/[#&]type=recovery/);
+    if(recoveryMatch && typeMatch){
+      var refreshMatch = window.location.hash.match(/[#&]refresh_token=([^&]+)/);
+      state.recoveryAccessToken = decodeURIComponent(recoveryMatch[1]);
+      state.recoveryRefreshToken = refreshMatch ? decodeURIComponent(refreshMatch[1]) : null;
+      history.replaceState(null, '', window.location.pathname + window.location.search);
+      openModal('reset-password');
+    }
   })();
 
   // Some mobile browsers restore a fully frozen snapshot of the page

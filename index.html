@@ -928,19 +928,17 @@
             </div>
             <div class="form-row-2">
               <div class="form-field">
-                <label for="f-id-type">Government ID type</label>
-                <select id="f-id-type">
-                  <option value="">Select ID type</option>
-                  <option value="NIN">NIN</option>
-                  <option value="Passport">International Passport</option>
-                  <option value="Driver's Licence">Driver&rsquo;s Licence</option>
-                  <option value="Voter's Card">Voter&rsquo;s Card</option>
-                </select>
+                <label for="f-country">Country</label>
+                <select id="f-country"></select>
               </div>
               <div class="form-field">
-                <label for="f-id-number">ID number</label>
-                <input type="text" id="f-id-number" placeholder="As it appears on the ID" maxlength="40">
+                <label for="f-id-type">Government ID type</label>
+                <select id="f-id-type"></select>
               </div>
+            </div>
+            <div class="form-field">
+              <label for="f-id-number">ID number</label>
+              <input type="text" id="f-id-number" placeholder="As it appears on the ID" maxlength="40">
             </div>
           </div>
           <div class="form-field">
@@ -1027,6 +1025,57 @@
     plum:  '#6B4E71'
   };
   var ACCENT_KEYS = Object.keys(ACCENTS);
+
+  // Which government ID documents make sense to ask for depends on the
+  // country — asking a US organizer for a "NIN" (Nigeria's National
+  // Identification Number) makes no sense, and vice versa. "Other" is
+  // a deliberately generic fallback for any country not listed here.
+  var COUNTRY_ID_TYPES = {
+    'Nigeria': ['NIN', 'BVN', 'International Passport', "Driver's Licence", "Voter's Card"],
+    'Ghana': ['Ghana Card (National ID)', 'International Passport', "Driver's Licence"],
+    'Kenya': ['National ID', 'International Passport', "Driver's Licence"],
+    'South Africa': ['National ID', 'International Passport', "Driver's Licence"],
+    'Uganda': ['National ID', 'International Passport', "Driver's Licence"],
+    'Tanzania': ['National ID (NIDA)', 'International Passport', "Driver's Licence"],
+    'Egypt': ['National ID', 'International Passport', "Driver's Licence"],
+    'Morocco': ['National ID (CIN)', 'International Passport', "Driver's Licence"],
+    'United States': ['Social Security Number', 'International Passport', "Driver's Licence", 'State ID'],
+    'United Kingdom': ['National Insurance Number', 'International Passport', "Driver's Licence"],
+    'Canada': ['Social Insurance Number', 'International Passport', "Driver's Licence", 'Provincial ID'],
+    'India': ['Aadhaar', 'PAN Card', 'International Passport', "Driver's Licence"],
+    'Indonesia': ['KTP (National ID)', 'International Passport', "Driver's Licence"],
+    'Philippines': ['National ID (PhilSys)', 'International Passport', "Driver's Licence"],
+    'Brazil': ['CPF', 'RG (National ID)', 'International Passport'],
+    'Mexico': ['CURP', 'INE/IFE', 'International Passport'],
+    'Germany': ['National ID (Personalausweis)', 'International Passport', "Driver's Licence"],
+    'France': ["National ID (Carte Nationale d'Identité)", 'International Passport', "Driver's Licence"],
+    'Other': ['International Passport', 'National ID', "Driver's Licence"]
+  };
+  var COUNTRY_LIST = Object.keys(COUNTRY_ID_TYPES);
+
+  // Fills a country <select> and an ID-type <select> (given their
+  // element ids), and keeps the ID-type list in sync whenever the
+  // country changes. Used by both the fundraiser-creation vetting form
+  // and the withdrawal form.
+  function populateCountryIdTypeDropdowns(countrySelectId, idTypeSelectId, preselectedCountry){
+    var countryEl = document.getElementById(countrySelectId);
+    var idTypeEl = document.getElementById(idTypeSelectId);
+    if(!countryEl || !idTypeEl){ return; }
+
+    countryEl.innerHTML = '<option value="">Select country</option>' +
+      COUNTRY_LIST.map(function(c){
+        return '<option value="' + c + '"' + (c === preselectedCountry ? ' selected' : '') + '>' + c + '</option>';
+      }).join('');
+
+    function refreshIdTypes(){
+      var country = countryEl.value;
+      var types = COUNTRY_ID_TYPES[country] || [];
+      idTypeEl.innerHTML = '<option value="">' + (country ? 'Select ID type' : 'Select a country first') + '</option>' +
+        types.map(function(t){ return '<option value="' + t + '">' + t + '</option>'; }).join('');
+    }
+    countryEl.addEventListener('change', refreshIdTypes);
+    refreshIdTypes();
+  }
 
   // ---------- Cover photo upload (create-fundraiser form) ----------
   // Holds the resized image for the fundraiser currently being created.
@@ -1998,6 +2047,51 @@
     });
   }
 
+  function renderPayoutFields(method){
+    if(method === 'bank'){
+      return (
+        '<div class="form-row-2">' +
+          '<div class="form-field"><label for="w-bank-country">Recipient bank country</label>' +
+          '<select id="w-bank-country">' + COUNTRY_LIST.map(function(c){ return '<option value="' + c + '">' + c + '</option>'; }).join('') + '</select></div>' +
+          '<div class="form-field"><label for="w-bank-currency">Currency</label>' +
+          '<select id="w-bank-currency">' +
+            '<option value="USD">USD</option><option value="GBP">GBP</option><option value="EUR">EUR</option>' +
+            '<option value="NGN">NGN</option><option value="CAD">CAD</option><option value="Other">Other</option>' +
+          '</select></div>' +
+        '</div>' +
+        '<div class="form-field"><label for="w-bank-account-name">Account holder name</label>' +
+        '<input type="text" id="w-bank-account-name" placeholder="Must match your ID" maxlength="80"></div>' +
+        '<div class="form-field"><label for="w-bank-name">Bank name</label>' +
+        '<input type="text" id="w-bank-name" maxlength="80"></div>' +
+        '<div class="form-field"><label for="w-bank-account-number">Account number / IBAN</label>' +
+        '<input type="text" id="w-bank-account-number" maxlength="60"></div>' +
+        '<div class="form-field"><label for="w-bank-swift">Routing / SWIFT / sort code (if applicable)</label>' +
+        '<input type="text" id="w-bank-swift" maxlength="60"></div>'
+      );
+    }
+    if(method === 'crypto'){
+      return (
+        '<div class="form-field"><label for="w-crypto-asset">Cryptocurrency</label>' +
+        '<select id="w-crypto-asset">' +
+          '<option value="USDC-ERC20">USDC (Ethereum / ERC-20)</option>' +
+          '<option value="USDC-TRC20">USDC (Tron / TRC-20)</option>' +
+          '<option value="BTC">Bitcoin (BTC)</option>' +
+          '<option value="Other">Other</option>' +
+        '</select></div>' +
+        '<div class="form-field"><label for="w-crypto-address">Wallet address</label>' +
+        '<input type="text" id="w-crypto-address" maxlength="120"></div>' +
+        '<div class="note-box" style="margin:4px 0 12px;">Double-check this address carefully — sending to a wrong or unsupported address or network cannot be reversed.</div>'
+      );
+    }
+    // paypal (default)
+    return (
+      '<div class="form-field"><label for="w-paypal">PayPal email</label>' +
+      '<input type="email" id="w-paypal" placeholder="you@example.com" maxlength="120"></div>' +
+      '<div class="form-field"><label for="w-tags">Tag(s)</label>' +
+      '<input type="text" id="w-tags" placeholder="e.g. @cashtag, Venmo handle" maxlength="140"></div>'
+    );
+  }
+
   function renderWithdrawModal(root){
     var wc = state.campaigns.find(function(x){ return x.id === state.withdrawCampaignId; });
     if(!wc){ closeModal(); return; }
@@ -2016,23 +2110,28 @@
             : '<form id="withdraw-form">' +
                 '<div class="form-field"><label for="w-legal-name">Full legal name</label>' +
                 '<input type="text" id="w-legal-name" placeholder="Must match your ID and payout account" maxlength="80" required></div>' +
-                '<div class="form-field"><label for="w-id-type">Government ID type</label>' +
-                '<select id="w-id-type" required>' +
-                  '<option value="">Select ID type</option>' +
-                  '<option value="NIN">NIN</option>' +
-                  '<option value="Passport">International Passport</option>' +
-                  '<option value="Driver\'s Licence">Driver&rsquo;s Licence</option>' +
-                  '<option value="Voter\'s Card">Voter&rsquo;s Card</option>' +
-                '</select></div>' +
+                '<div class="form-row-2">' +
+                  '<div class="form-field">' +
+                    '<label for="w-country">Country</label>' +
+                    '<select id="w-country" required></select>' +
+                  '</div>' +
+                  '<div class="form-field">' +
+                    '<label for="w-id-type">Government ID type</label>' +
+                    '<select id="w-id-type" required></select>' +
+                  '</div>' +
+                '</div>' +
                 '<div class="form-field"><label for="w-id-number">ID number</label>' +
                 '<input type="text" id="w-id-number" placeholder="As it appears on the ID" maxlength="40" required></div>' +
                 '<div class="form-field"><label for="w-amount">Amount to withdraw</label>' +
                 '<input type="number" id="w-amount" min="1" max="' + available + '" step="1" value="' + available + '" required></div>' +
                 '<div class="tip-note" id="w-fee-note"></div>' +
-                '<div class="form-field"><label for="w-paypal">PayPal email</label>' +
-                '<input type="email" id="w-paypal" placeholder="you@example.com" maxlength="120" required></div>' +
-                '<div class="form-field"><label for="w-tags">Tag(s)</label>' +
-                '<input type="text" id="w-tags" placeholder="e.g. @cashtag, Venmo handle" maxlength="140"></div>' +
+                '<div class="form-field"><label for="w-payout-method">How should we send your funds?</label>' +
+                '<select id="w-payout-method">' +
+                  '<option value="paypal">PayPal</option>' +
+                  '<option value="bank">Bank transfer</option>' +
+                  '<option value="crypto">Cryptocurrency</option>' +
+                '</select></div>' +
+                '<div id="w-payout-fields">' + renderPayoutFields('paypal') + '</div>' +
                 '<button type="submit" class="btn btn-gold btn-full">Withdraw</button>' +
                 '<div class="demo-note">We verify the name and ID on every withdrawal against the fundraiser before sending funds — this files a request, and the FundMyHope team follows up by hand once it checks out.</div>' +
               '</form>') +
@@ -2043,6 +2142,16 @@
     document.getElementById('modal-overlay').addEventListener('click', function(e){
       if(e.target.id === 'modal-overlay'){ closeModal(); }
     });
+
+    if(available > 0){
+      populateCountryIdTypeDropdowns('w-country', 'w-id-type');
+
+      var payoutMethodEl = document.getElementById('w-payout-method');
+      var payoutFieldsEl = document.getElementById('w-payout-fields');
+      payoutMethodEl.addEventListener('change', function(){
+        payoutFieldsEl.innerHTML = renderPayoutFields(payoutMethodEl.value);
+      });
+    }
 
     var wAmountInput = document.getElementById('w-amount');
     var feeNoteEl = document.getElementById('w-fee-note');
@@ -2069,14 +2178,43 @@
         if(amt > available){ errEl.textContent = 'You can withdraw up to ' + fmt(available) + '.'; errEl.classList.add('show'); return; }
 
         var legalName = document.getElementById('w-legal-name').value.trim();
+        var country = document.getElementById('w-country').value;
         var idType = document.getElementById('w-id-type').value;
         var idNumber = document.getElementById('w-id-number').value.trim();
-        if(!legalName || !idType || !idNumber){ errEl.textContent = 'Add your legal name and a valid ID so we can verify the payout.'; errEl.classList.add('show'); return; }
+        if(!legalName || !country || !idType || !idNumber){ errEl.textContent = 'Add your legal name, country, and a valid ID so we can verify the payout.'; errEl.classList.add('show'); return; }
 
-        var paypalEmail = document.getElementById('w-paypal').value.trim();
-        var tags = document.getElementById('w-tags').value.trim();
-        if(!paypalEmail){ errEl.textContent = 'Add a PayPal email so the team can send your funds.'; errEl.classList.add('show'); return; }
-        var payoutInfo = { paypalEmail: paypalEmail, tags: tags, legalName: legalName, idType: idType, idNumber: idNumber };
+        var payoutMethod = document.getElementById('w-payout-method').value;
+        var payoutInfo = { legalName: legalName, country: country, idType: idType, idNumber: idNumber, payoutMethod: payoutMethod };
+
+        if(payoutMethod === 'bank'){
+          var bankCountry = document.getElementById('w-bank-country').value;
+          var bankCurrency = document.getElementById('w-bank-currency').value;
+          var bankAccountName = document.getElementById('w-bank-account-name').value.trim();
+          var bankName = document.getElementById('w-bank-name').value.trim();
+          var bankAccountNumber = document.getElementById('w-bank-account-number').value.trim();
+          var bankSwift = document.getElementById('w-bank-swift').value.trim();
+          if(!bankAccountName || !bankName || !bankAccountNumber){
+            errEl.textContent = 'Fill in your bank account details.'; errEl.classList.add('show'); return;
+          }
+          payoutInfo.bankCountry = bankCountry;
+          payoutInfo.bankCurrency = bankCurrency;
+          payoutInfo.bankAccountName = bankAccountName;
+          payoutInfo.bankName = bankName;
+          payoutInfo.bankAccountNumber = bankAccountNumber;
+          payoutInfo.bankSwift = bankSwift;
+        } else if(payoutMethod === 'crypto'){
+          var cryptoAsset = document.getElementById('w-crypto-asset').value;
+          var cryptoAddress = document.getElementById('w-crypto-address').value.trim();
+          if(!cryptoAddress){ errEl.textContent = 'Add a wallet address.'; errEl.classList.add('show'); return; }
+          payoutInfo.cryptoAsset = cryptoAsset;
+          payoutInfo.cryptoAddress = cryptoAddress;
+        } else {
+          var paypalEmail = document.getElementById('w-paypal').value.trim();
+          var tags = document.getElementById('w-tags').value.trim();
+          if(!paypalEmail){ errEl.textContent = 'Add a PayPal email so the team can send your funds.'; errEl.classList.add('show'); return; }
+          payoutInfo.paypalEmail = paypalEmail;
+          payoutInfo.tags = tags;
+        }
 
         var submitBtn = e.target.querySelector('button[type="submit"]');
         submitBtn.disabled = true;
@@ -2116,8 +2254,15 @@
           body: JSON.stringify({
             campaignId: c.id, campaignTitle: c.title, amount: amount,
             platformFeePercent: PLATFORM_FEE_PERCENT, platformFee: platformFee, netAmount: netAmount,
-            organizerId: c.organizerId, paypalEmail: payoutInfo.paypalEmail, tags: payoutInfo.tags,
-            legalName: payoutInfo.legalName, idType: payoutInfo.idType, idNumber: payoutInfo.idNumber
+            organizerId: c.organizerId,
+            legalName: payoutInfo.legalName, country: payoutInfo.country,
+            idType: payoutInfo.idType, idNumber: payoutInfo.idNumber,
+            payoutMethod: payoutInfo.payoutMethod,
+            paypalEmail: payoutInfo.paypalEmail, tags: payoutInfo.tags,
+            bankCountry: payoutInfo.bankCountry, bankCurrency: payoutInfo.bankCurrency,
+            bankAccountName: payoutInfo.bankAccountName, bankName: payoutInfo.bankName,
+            bankAccountNumber: payoutInfo.bankAccountNumber, bankSwift: payoutInfo.bankSwift,
+            cryptoAsset: payoutInfo.cryptoAsset, cryptoAddress: payoutInfo.cryptoAddress
           })
         });
       }catch(notifyErr){
@@ -3044,6 +3189,7 @@
       });
     });
     resetCoverUpload();
+    populateCountryIdTypeDropdowns('f-country', 'f-id-type');
   }
 
   // Shows a photo that's already attached to the fundraiser (edit mode)
@@ -3197,6 +3343,7 @@
     var organizer = document.getElementById('f-organizer').value.trim();
     var story = document.getElementById('f-story').value.trim();
     var legalName = document.getElementById('f-legal-name').value.trim();
+    var country = document.getElementById('f-country').value;
     var idType = document.getElementById('f-id-type').value;
     var idNumber = document.getElementById('f-id-number').value.trim();
     var accentNode = document.querySelector('#swatch-row .swatch.selected');
@@ -3208,7 +3355,7 @@
       showToast('Fill in every field to publish.');
       return;
     }
-    if(!isEdit && (!legalName || !idType || !idNumber)){
+    if(!isEdit && (!legalName || !country || !idType || !idNumber)){
       showToast('Add your legal name and a valid ID so we can verify this fundraiser before it goes live.');
       return;
     }
@@ -3289,7 +3436,7 @@
           title: title, category: category, organizer: organizer,
           organizer_id: state.user.id, goal: goal, story: story, accent: accent,
           image_url: imageUrl,
-          organizer_legal_name: legalName, organizer_id_type: idType, organizer_id_number: idNumber
+          organizer_legal_name: legalName, organizer_country: country, organizer_id_type: idType, organizer_id_number: idNumber
         };
         var rows = await supabaseRest('/campaigns', {
           method: 'POST',

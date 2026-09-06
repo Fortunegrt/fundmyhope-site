@@ -1051,7 +1051,64 @@
     'France': ["National ID (Carte Nationale d'Identité)", 'International Passport', "Driver's Licence"],
     'Other': ['International Passport', 'National ID', "Driver's Licence"]
   };
-  var COUNTRY_LIST = Object.keys(COUNTRY_ID_TYPES);
+  var COUNTRY_LIST = Object.keys(COUNTRY_ID_TYPES).filter(function(c){ return c !== 'Other'; }).sort().concat(['Other']);
+
+  // Based on hands-on testing of Grey's actual send-money flow, not
+  // just their docs: which fields a bank transfer needs depends on the
+  // CURRENCY, not the country — a country can offer more than one
+  // currency (e.g. the UK supports both GBP and EUR), and each
+  // currency has its own required fields regardless of which country
+  // it's being sent to. "Other" has no fixed currency/fields since we
+  // don't know what an unlisted country's banks require — it falls
+  // back to one free-text box the team reviews by hand.
+  var COUNTRY_CURRENCIES = {
+    'Nigeria': ['NGN'], 'Ghana': ['GHS'], 'Kenya': ['KES'], 'South Africa': ['ZAR'],
+    'Uganda': ['UGX'], 'Tanzania': ['TZS'], 'Egypt': ['EGP'], 'Morocco': ['MAD'],
+    'United States': ['USD'], 'United Kingdom': ['GBP', 'EUR'], 'Canada': ['CAD'],
+    'India': ['INR'], 'Indonesia': ['IDR'], 'Philippines': ['PHP'], 'Brazil': ['BRL'],
+    'Mexico': ['MXN'], 'Germany': ['EUR'], 'France': ['EUR'], 'Other': []
+  };
+
+  // A plain account number + bank name is the default most currencies
+  // actually need — only a handful require something extra, per what
+  // was directly confirmed in Grey's app (EUR → IBAN, GBP → sort code,
+  // CAD → institution + transit number). Recipient first/last name is
+  // asked for separately, on top of whichever of these apply.
+  var DEFAULT_CURRENCY_FIELDS = [
+    { id: 'accountNumber', label: 'Account number' },
+    { id: 'bankName', label: 'Bank name' }
+  ];
+  var CURRENCY_FIELDS = {
+    'EUR': [
+      { id: 'iban', label: 'IBAN' },
+      { id: 'bankName', label: 'Bank name' }
+    ],
+    'GBP': [
+      { id: 'accountNumber', label: 'Account number' },
+      { id: 'sortCode', label: 'Sort code' },
+      { id: 'bankName', label: 'Bank name' }
+    ],
+    'USD': [
+      { id: 'accountNumber', label: 'Account number' },
+      { id: 'routingNumber', label: 'Routing number (ABA)' },
+      { id: 'bankName', label: 'Bank name' }
+    ],
+    'CAD': [
+      { id: 'accountNumber', label: 'Account number' },
+      { id: 'institutionNumber', label: 'Institution number' },
+      { id: 'transitNumber', label: 'Transit number' },
+      { id: 'bankName', label: 'Bank name' }
+    ],
+    'INR': [
+      { id: 'accountNumber', label: 'Account number' },
+      { id: 'ifsc', label: 'IFSC code' },
+      { id: 'bankName', label: 'Bank name' }
+    ],
+    'MXN': [
+      { id: 'clabe', label: 'CLABE (18 digits)' }
+    ]
+  };
+
 
   // Fills a country <select> and an ID-type <select> (given their
   // element ids), and keeps the ID-type list in sync whenever the
@@ -2047,26 +2104,65 @@
     });
   }
 
+  function renderBankCurrencyOptions(country){
+    var currencies = COUNTRY_CURRENCIES[country] || [];
+    if(!country || !currencies.length){
+      return '<option value="">' + (country ? 'No currency on file — see below' : 'Select a country first') + '</option>';
+    }
+    return currencies.map(function(cur){ return '<option value="' + cur + '">' + cur + '</option>'; }).join('');
+  }
+
+  function renderBankDynamicFields(country, currency){
+    if(!country){
+      return '<p style="font-size:13.5px; color:var(--ink-faint);">Select a country first.</p>';
+    }
+    var currencies = COUNTRY_CURRENCIES[country] || [];
+    if(!currencies.length){
+      // "Other" (or anything unlisted) — we don't know this country's
+      // banking fields, so ask for everything in one box instead of
+      // guessing at a schema, and flag it for the team to double-check.
+      return (
+        '<div class="note-box" style="margin:4px 0 12px;">' +
+          'We don\'t have a template for this country\'s bank details yet. List everything a transfer would need below — ' +
+          'currency, account number, any routing/IBAN/SWIFT code, branch, etc. — and our team will confirm anything unclear before sending.' +
+        '</div>' +
+        '<div class="form-field"><label for="w-bank-field-other">Bank &amp; transfer details</label>' +
+        '<textarea id="w-bank-field-other" rows="4" placeholder="Currency, bank name, account number, routing/IBAN/SWIFT, anything else needed"></textarea></div>'
+      );
+    }
+    var fields = CURRENCY_FIELDS[currency] || DEFAULT_CURRENCY_FIELDS;
+    return fields.map(function(f){
+      return '<div class="form-field"><label for="w-bank-field-' + f.id + '">' + f.label + '</label>' +
+             '<input type="text" id="w-bank-field-' + f.id + '" maxlength="80"></div>';
+    }).join('');
+  }
+
   function renderPayoutFields(method){
     if(method === 'bank'){
       return (
         '<div class="form-row-2">' +
-          '<div class="form-field"><label for="w-bank-country">Recipient bank country</label>' +
-          '<select id="w-bank-country">' + COUNTRY_LIST.map(function(c){ return '<option value="' + c + '">' + c + '</option>'; }).join('') + '</select></div>' +
-          '<div class="form-field"><label for="w-bank-currency">Currency</label>' +
-          '<select id="w-bank-currency">' +
-            '<option value="USD">USD</option><option value="GBP">GBP</option><option value="EUR">EUR</option>' +
-            '<option value="NGN">NGN</option><option value="CAD">CAD</option><option value="Other">Other</option>' +
-          '</select></div>' +
+          '<div class="form-field"><label for="w-bank-first-name">Recipient first name</label>' +
+          '<input type="text" id="w-bank-first-name" placeholder="Must match your ID" maxlength="60"></div>' +
+          '<div class="form-field"><label for="w-bank-last-name">Recipient last name</label>' +
+          '<input type="text" id="w-bank-last-name" placeholder="Must match your ID" maxlength="60"></div>' +
         '</div>' +
-        '<div class="form-field"><label for="w-bank-account-name">Account holder name</label>' +
-        '<input type="text" id="w-bank-account-name" placeholder="Must match your ID" maxlength="80"></div>' +
-        '<div class="form-field"><label for="w-bank-name">Bank name</label>' +
-        '<input type="text" id="w-bank-name" maxlength="80"></div>' +
-        '<div class="form-field"><label for="w-bank-account-number">Account number / IBAN</label>' +
-        '<input type="text" id="w-bank-account-number" maxlength="60"></div>' +
-        '<div class="form-field"><label for="w-bank-swift">Routing / SWIFT / sort code (if applicable)</label>' +
-        '<input type="text" id="w-bank-swift" maxlength="60"></div>'
+        '<div class="form-field"><label for="w-bank-home-address">Recipient home address</label>' +
+        '<input type="text" id="w-bank-home-address" placeholder="Street, city, state/province" maxlength="120"></div>' +
+        '<div class="form-field"><label for="w-bank-home-zip">Recipient postal/zip code</label>' +
+        '<input type="text" id="w-bank-home-zip" maxlength="20"></div>' +
+        '<div class="form-row-2">' +
+          '<div class="form-field"><label for="w-bank-country">Recipient bank country</label>' +
+          '<select id="w-bank-country"><option value="">Select country</option>' +
+            COUNTRY_LIST.map(function(c){ return '<option value="' + c + '">' + c + '</option>'; }).join('') +
+          '</select></div>' +
+          '<div class="form-field"><label for="w-bank-currency">Currency</label>' +
+          '<select id="w-bank-currency">' + renderBankCurrencyOptions('') + '</select></div>' +
+        '</div>' +
+        '<div id="w-bank-dynamic-fields">' + renderBankDynamicFields('', '') + '</div>' +
+        '<div class="form-field"><label for="w-bank-address">Bank address</label>' +
+        '<input type="text" id="w-bank-address" placeholder="Branch street, city" maxlength="120"></div>' +
+        '<div class="form-field"><label for="w-bank-zip">Bank postal/zip code</label>' +
+        '<input type="text" id="w-bank-zip" maxlength="20"></div>'
       );
     }
     if(method === 'crypto'){
@@ -2148,8 +2244,21 @@
 
       var payoutMethodEl = document.getElementById('w-payout-method');
       var payoutFieldsEl = document.getElementById('w-payout-fields');
+      function wireBankCountryChange(){
+        var bankCountryEl = document.getElementById('w-bank-country');
+        var bankCurrencyEl = document.getElementById('w-bank-currency');
+        if(!bankCountryEl || !bankCurrencyEl){ return; }
+        bankCountryEl.addEventListener('change', function(){
+          bankCurrencyEl.innerHTML = renderBankCurrencyOptions(bankCountryEl.value);
+          document.getElementById('w-bank-dynamic-fields').innerHTML = renderBankDynamicFields(bankCountryEl.value, bankCurrencyEl.value);
+        });
+        bankCurrencyEl.addEventListener('change', function(){
+          document.getElementById('w-bank-dynamic-fields').innerHTML = renderBankDynamicFields(bankCountryEl.value, bankCurrencyEl.value);
+        });
+      }
       payoutMethodEl.addEventListener('change', function(){
         payoutFieldsEl.innerHTML = renderPayoutFields(payoutMethodEl.value);
+        if(payoutMethodEl.value === 'bank'){ wireBankCountryChange(); }
       });
     }
 
@@ -2187,21 +2296,47 @@
         var payoutInfo = { legalName: legalName, country: country, idType: idType, idNumber: idNumber, payoutMethod: payoutMethod };
 
         if(payoutMethod === 'bank'){
+          var bankFirstName = document.getElementById('w-bank-first-name').value.trim();
+          var bankLastName = document.getElementById('w-bank-last-name').value.trim();
+          var bankHomeAddress = document.getElementById('w-bank-home-address').value.trim();
+          var bankHomeZip = document.getElementById('w-bank-home-zip').value.trim();
           var bankCountry = document.getElementById('w-bank-country').value;
           var bankCurrency = document.getElementById('w-bank-currency').value;
-          var bankAccountName = document.getElementById('w-bank-account-name').value.trim();
-          var bankName = document.getElementById('w-bank-name').value.trim();
-          var bankAccountNumber = document.getElementById('w-bank-account-number').value.trim();
-          var bankSwift = document.getElementById('w-bank-swift').value.trim();
-          if(!bankAccountName || !bankName || !bankAccountNumber){
-            errEl.textContent = 'Fill in your bank account details.'; errEl.classList.add('show'); return;
+          if(!bankFirstName || !bankLastName || !bankHomeAddress || !bankHomeZip || !bankCountry){
+            errEl.textContent = 'Add the recipient\'s first name, last name, home address, postal code, and country.'; errEl.classList.add('show'); return;
+          }
+          var currencies = COUNTRY_CURRENCIES[bankCountry] || [];
+          var bankDetailLines = [];
+          if(currencies.length){
+            var currencyFields = CURRENCY_FIELDS[bankCurrency] || DEFAULT_CURRENCY_FIELDS;
+            for(var bi = 0; bi < currencyFields.length; bi++){
+              var f = currencyFields[bi];
+              var fEl = document.getElementById('w-bank-field-' + f.id);
+              var fVal = fEl ? fEl.value.trim() : '';
+              if(!fVal){
+                errEl.textContent = 'Fill in ' + f.label.toLowerCase() + '.'; errEl.classList.add('show'); return;
+              }
+              bankDetailLines.push(f.label + ': ' + fVal);
+            }
+          } else {
+            var otherEl = document.getElementById('w-bank-field-other');
+            var otherVal = otherEl ? otherEl.value.trim() : '';
+            if(!otherVal){
+              errEl.textContent = 'Describe the bank details needed for this transfer.'; errEl.classList.add('show'); return;
+            }
+            bankDetailLines.push(otherVal);
+          }
+          var bankAddress = document.getElementById('w-bank-address').value.trim();
+          var bankZip = document.getElementById('w-bank-zip').value.trim();
+          if(!bankAddress || !bankZip){
+            errEl.textContent = 'Add the bank\'s address and postal code.'; errEl.classList.add('show'); return;
           }
           payoutInfo.bankCountry = bankCountry;
-          payoutInfo.bankCurrency = bankCurrency;
-          payoutInfo.bankAccountName = bankAccountName;
-          payoutInfo.bankName = bankName;
-          payoutInfo.bankAccountNumber = bankAccountNumber;
-          payoutInfo.bankSwift = bankSwift;
+          payoutInfo.bankCurrency = bankCurrency || 'Unspecified — see details';
+          payoutInfo.bankAccountName = bankFirstName + ' ' + bankLastName;
+          payoutInfo.bankHomeAddress = bankHomeAddress + ', ' + bankHomeZip;
+          payoutInfo.bankBranchAddress = bankAddress + ', ' + bankZip;
+          payoutInfo.bankDetails = bankDetailLines.join('; ');
         } else if(payoutMethod === 'crypto'){
           var cryptoAsset = document.getElementById('w-crypto-asset').value;
           var cryptoAddress = document.getElementById('w-crypto-address').value.trim();
@@ -2239,15 +2374,18 @@
   // withdrawal here is manual — there's no automated payout rail — so
   // this always pings the team with the organizer's stated legal name
   // and ID so a human can check it against the campaign before sending
-  // money, then follow up with the organizer directly.
-  // This needs a `withdrawal_requests` table (or similar) on the
-  // server/Supabase side to actually alert anyone; wire that up in
-  // server-example/.
+  // money, then follow up with the organizer directly. It also creates
+  // a row in `withdrawal_requests` (status: 'pending') so the request
+  // is actually tracked, not just emailed — flip that row's status to
+  // 'successful' directly in Supabase's Table Editor once the money's
+  // actually been sent; it'll show up as "Sent" on the campaign page
+  // the next time it loads.
   async function requestWithdrawal(c, amount, payoutInfo){
     var newWithdrawn = Number(c.withdrawn || 0) + amount;
+    var platformFee = 0, netAmount = amount;
     if(payoutInfo){
-      var platformFee = Math.round(amount * PLATFORM_FEE_PERCENT) / 100;
-      var netAmount = amount - platformFee;
+      platformFee = Math.round(amount * PLATFORM_FEE_PERCENT) / 100;
+      netAmount = amount - platformFee;
       try{
         await apiRequest('/notify-manual-withdrawal', {
           method: 'POST',
@@ -2260,8 +2398,8 @@
             payoutMethod: payoutInfo.payoutMethod,
             paypalEmail: payoutInfo.paypalEmail, tags: payoutInfo.tags,
             bankCountry: payoutInfo.bankCountry, bankCurrency: payoutInfo.bankCurrency,
-            bankAccountName: payoutInfo.bankAccountName, bankName: payoutInfo.bankName,
-            bankAccountNumber: payoutInfo.bankAccountNumber, bankSwift: payoutInfo.bankSwift,
+            bankAccountName: payoutInfo.bankAccountName, bankDetails: payoutInfo.bankDetails,
+            bankHomeAddress: payoutInfo.bankHomeAddress, bankBranchAddress: payoutInfo.bankBranchAddress,
             cryptoAsset: payoutInfo.cryptoAsset, cryptoAddress: payoutInfo.cryptoAddress
           })
         });
@@ -2269,6 +2407,35 @@
         // Don't block the withdrawal record on the notification — but
         // this really should be retried/alerted on some other way in
         // production, since a silent failure here means nobody gets told.
+      }
+    }
+    if(SUPABASE_URL && payoutInfo){
+      var payoutDetailsSummary;
+      if(payoutInfo.payoutMethod === 'bank'){
+        payoutDetailsSummary = 'Bank (' + payoutInfo.bankCurrency + ', ' + payoutInfo.bankCountry + ') — ' +
+          payoutInfo.bankAccountName + '; home address: ' + payoutInfo.bankHomeAddress + '; ' +
+          payoutInfo.bankDetails + '; bank address: ' + payoutInfo.bankBranchAddress;
+      } else if(payoutInfo.payoutMethod === 'crypto'){
+        payoutDetailsSummary = 'Crypto (' + payoutInfo.cryptoAsset + ') — ' + payoutInfo.cryptoAddress;
+      } else {
+        payoutDetailsSummary = 'PayPal — ' + payoutInfo.paypalEmail + (payoutInfo.tags ? ' (tags: ' + payoutInfo.tags + ')' : '');
+      }
+      try{
+        await supabaseRest('/withdrawal_requests', {
+          method: 'POST',
+          headers: { 'Prefer': 'return=minimal' },
+          body: JSON.stringify({
+            campaign_id: c.id, organizer_id: c.organizerId, amount: amount,
+            platform_fee: platformFee, net_amount: netAmount,
+            legal_name: payoutInfo.legalName, country: payoutInfo.country,
+            id_type: payoutInfo.idType, id_number: payoutInfo.idNumber,
+            payout_method: payoutInfo.payoutMethod, payout_details: payoutDetailsSummary,
+            status: 'pending'
+          })
+        });
+      }catch(trackErr){
+        // If this table isn't set up yet, don't block the withdrawal
+        // itself on it — the email notification above still went out.
       }
     }
     if(SUPABASE_URL){
@@ -2682,6 +2849,31 @@
     }
   }
 
+  async function loadWithdrawalHistory(campaignId){
+    var el = document.getElementById('withdrawal-history');
+    if(!el || !SUPABASE_URL){ return; }
+    try{
+      var rows = await supabaseRest('/withdrawal_requests?campaign_id=eq.' + encodeURIComponent(campaignId) + '&select=amount,status,created_at,completed_at&order=created_at.desc');
+      if(!rows || !rows.length){ el.innerHTML = ''; return; }
+      var statusLabel = { pending: 'Pending', successful: 'Sent', failed: 'Failed' };
+      var statusColor = { pending: 'var(--gold)', successful: 'var(--green)', failed: 'var(--rose)' };
+      el.innerHTML =
+        '<div style="font-size:12.5px; font-weight:600; color:var(--ink-soft); margin-bottom:6px;">Withdrawal history</div>' +
+        rows.map(function(r){
+          var label = statusLabel[r.status] || r.status;
+          var color = statusColor[r.status] || 'var(--ink-faint)';
+          return (
+            '<div style="display:flex; justify-content:space-between; align-items:center; font-size:13px; padding:6px 0; border-top:1px solid var(--border);">' +
+              '<span>' + fmt(r.amount) + ' &middot; ' + timeAgo(r.created_at) + '</span>' +
+              '<span style="color:' + color + '; font-weight:600;">' + label + '</span>' +
+            '</div>'
+          );
+        }).join('');
+    }catch(e){
+      el.innerHTML = '';
+    }
+  }
+
   async function loadCampaignReviews(campaignId){
     var list = document.getElementById('reviews-list');
     if(!list){ return; }
@@ -2782,6 +2974,7 @@
             '<div class="owner-panel-amt tabular">' + fmt(available) + '</div>' +
             '<div class="owner-panel-sub">available to withdraw' + (withdrawn > 0 ? ' &middot; ' + fmt(withdrawn) + ' already withdrawn' : '') + '</div>' +
             '<button type="button" class="btn btn-outline btn-full" id="withdraw-btn" style="margin-top:12px;"' + (available <= 0 ? ' disabled' : '') + '>Withdraw funds</button>' +
+            '<div id="withdrawal-history" style="margin-top:14px;"></div>' +
           '</div>'
         : '') +
         '<div class="raised-big tabular">' + fmt(c.raised) + '</div>' +
@@ -2947,6 +3140,7 @@
     if(withdrawBtn){
       withdrawBtn.addEventListener('click', function(){ openWithdrawModal(c.id); });
     }
+    if(isOwner){ loadWithdrawalHistory(c.id); }
 
     loadCampaignReviews(c.id);
 

@@ -58,6 +58,10 @@
   .app{ min-height: 100vh; display: flex; flex-direction: column; }
   .wrap{ max-width: 980px; margin: 0 auto; padding: 0 28px; }
   @media (max-width: 640px){ .wrap{ padding: 0 18px; } }
+  /* The header spans the full browser width on desktop (logo hard-left,
+     nav hard-right) — only the page's actual content stays capped at
+     980px for readability. */
+  header.site .wrap{ max-width: none; }
 
   /* ---------- Header ---------- */
   header.site{
